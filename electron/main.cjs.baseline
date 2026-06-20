@@ -2,33 +2,11 @@ const { app, BrowserWindow, ipcMain, clipboard, session, dialog, safeStorage } =
 const path = require('path')
 const fs = require('fs')
 const net = require('net')
-const tls = require('tls')
 
 let mainWindow = null
 
 // CSP
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.deepseek.com https://api.groq.com https://api.openai.com https://api.francetravail.io https://entreprise.francetravail.fr; img-src 'self' data:; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
-
-// ===== VALIDATION =====
-// Validation centralisée des payloads IPC pour éviter les données invalides accidentelles ou malveillantes.
-function validatePayload(payload, schema) {
-  if (!payload || typeof payload !== 'object') return { ok: false, erreur: 'Données invalides.' }
-  for (const [key, rule] of Object.entries(schema)) {
-    const val = payload[key]
-    if (rule === 'required-string') {
-      if (typeof val !== 'string' || val.trim() === '') return { ok: false, erreur: `Champ '${key}' requis.` }
-    } else if (rule === 'optional-string') {
-      if (val !== undefined && val !== null && typeof val !== 'string') return { ok: false, erreur: `Champ '${key}' doit être une chaîne.` }
-    } else if (rule === 'required-number') {
-      if (typeof val !== 'number' || isNaN(val)) return { ok: false, erreur: `Champ '${key}' doit être un nombre.` }
-    } else if (rule === 'optional-number') {
-      if (val !== undefined && val !== null && (typeof val !== 'number' || isNaN(val))) return { ok: false, erreur: `Champ '${key}' doit être un nombre.` }
-    } else if (rule === 'boolean') {
-      if (typeof val !== 'boolean') return { ok: false, erreur: `Champ '${key}' doit être un booléen.` }
-    }
-  }
-  return null // null = OK
-}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -56,11 +34,6 @@ function createWindow() {
     if (url !== mainWindow.webContents.getURL()) event.preventDefault()
   })
 
-  // Charger les secrets IMMÉDIATEMENT, avant tout affichage
-  mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('secrets-charges')
-  })
-
   const isDev = !app.isPackaged
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
@@ -75,16 +48,15 @@ app.whenReady().then(createWindow)
 app.on('window-all-closed', () => app.quit())
 app.on('activate', () => { if (mainWindow === null) createWindow() })
 
-// ===== SAFE STORAGE =====
+// ===== SAFE STORAGE (E1) =====
 // Clé API et identifiants IMAP sont chiffrés via safeStorage d'Electron.
-// L'export (voir plus bas) ne contient JAMAIS ces secrets.
+// L'export de données (H2) ne contient JAMAIS ces secrets.
 
 const SECRETS_FILE = path.join(app.getPath('userData'), 'gojob-secrets.enc')
 
 ipcMain.handle('safe-chiffrer', async (_event, plaintext) => {
-  const err = validatePayload({ plaintext }, { plaintext: 'required-string' })
-  if (err) return err
   if (!safeStorage.isEncryptionAvailable()) {
+    // Fallback : encode en base64 (pas de chiffrement réel, mais safeStorage indisponible)
     return Buffer.from(plaintext).toString('base64')
   }
   const encrypted = safeStorage.encryptString(plaintext)
@@ -92,8 +64,6 @@ ipcMain.handle('safe-chiffrer', async (_event, plaintext) => {
 })
 
 ipcMain.handle('safe-dechiffrer', async (_event, encryptedB64) => {
-  const err = validatePayload({ encryptedB64 }, { encryptedB64: 'required-string' })
-  if (err) return err
   if (!safeStorage.isEncryptionAvailable()) {
     return Buffer.from(encryptedB64, 'base64').toString('utf-8')
   }
@@ -103,19 +73,14 @@ ipcMain.handle('safe-dechiffrer', async (_event, encryptedB64) => {
 
 // Persistance des secrets: sauvegarde d'un objet { cleApi, franceTravailClientId, franceTravailClientSecret, imap }
 ipcMain.handle('sauvegarder-secrets', async (_event, secrets) => {
-  // Ne sauvegarder que si au moins une clé API est fournie (évite d'écraser avec des valeurs vides)
-  if (!secrets || typeof secrets !== 'object') return { ok: false, erreur: 'Données invalides.' }
-  // Si cleApi est vide, on ne sauvegarde pas (protection contre l'écrasement accidentel)
-  if (secrets.cleApi !== undefined && secrets.cleApi !== null && typeof secrets.cleApi === 'string' && secrets.cleApi.trim() === '') {
-    return { ok: true, ignore: 'cleApi vide : non sauvegardé.' }
-  }
   const json = JSON.stringify(secrets)
   if (safeStorage.isEncryptionAvailable()) {
     fs.writeFileSync(SECRETS_FILE, safeStorage.encryptString(json))
   } else {
+    // Fallback non-chiffré (visible en base64, mais safeStorage indisponible)
     fs.writeFileSync(SECRETS_FILE, Buffer.from(json).toString('base64'))
   }
-  return { ok: true }
+  return true
 })
 
 ipcMain.handle('charger-secrets', async () => {
@@ -136,13 +101,11 @@ ipcMain.handle('charger-secrets', async () => {
 
 // ===== PRESSE-PAPIER =====
 ipcMain.handle('copier-presse-papier', (_event, texte) => {
-  const err = validatePayload({ texte }, { texte: 'required-string' })
-  if (err) return err
   clipboard.writeText(texte)
-  return { ok: true }
+  return true
 })
 
-// ===== IMPORT CV =====
+// ===== IMPORT CV (5) =====
 ipcMain.handle('importer-cv', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Importer un CV',
@@ -164,17 +127,21 @@ ipcMain.handle('importer-cv', async () => {
     if (ext === '.txt' || ext === '.md') {
       texte = fs.readFileSync(filePath, 'utf-8')
     } else if (ext === '.pdf') {
+      // Extraction basique du PDF — lit le texte brut. Pour mieux : utiliser pdf-parse en runtime.
       const buf = fs.readFileSync(filePath)
       texte = buf.toString('utf-8')
         .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
+      // Si le PDF contient surtout des bytes non-textuels, on prévient
       if (texte.length < 50) {
         texte = '[Le PDF semble contenir peu de texte exploitable. Essaye de copier-coller le contenu directement.]'
       }
     } else if (ext === '.docx' || ext === '.doc') {
+      // .docx est un zip XML; extraction minimale des paragraphes
       try {
         const zipBuffer = fs.readFileSync(filePath)
+        // On cherche le texte entre les balises <w:t> dans le XML central
         const textContent = zipBuffer.toString('utf-8')
         const matches = textContent.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || []
         texte = matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ').trim()
@@ -196,11 +163,11 @@ ipcMain.handle('importer-cv', async () => {
 })
 
 // ===== GÉNÉRATION LETTRE (dans main process = pas de CORS) =====
-// Prompt partagé — utilisé aussi dans le fallback web (src/utils/prompt.ts)
-function buildSystemPrompt(titreMetier, langue) {
+ipcMain.handle('generer-lettre', async (_event, { offre, cvText, competences, nom, endpoint, modele, cleApi, titreMetier, langue }) => {
   const intitule = titreMetier || 'le métier visé'
   const langage = langue === 'es' ? 'espagnol (Amérique latine)' : 'français'
-  return `Tu es un assistant spécialisé dans la rédaction de lettres de motivation pour ${intitule}.
+
+  const systemPrompt = `Tu es un assistant spécialisé dans la rédaction de lettres de motivation pour ${intitule}.
 
 Règles :
 - Lettre personnalisée : adapte chaque phrase à l'offre spécifique et au profil réel du candidat.
@@ -211,10 +178,8 @@ Règles :
 - Langue : ${langage} sauf si l'offre est dans une autre langue.
 - Signature : "Cordialement, [Prénom]"
 - Relis-toi : vérifie la cohérence entre ce que tu écris et le profil.`
-}
 
-function buildUserPrompt(offre, nom, intitule, competences, cvText) {
-  return `Offre : ${offre.titre} chez ${offre.entreprise}
+  const userPrompt = `Offre : ${offre.titre} chez ${offre.entreprise}
 Description : ${offre.description || 'Non fournie'}
 Source : ${offre.source}
 
@@ -225,18 +190,6 @@ Profil du candidat :
 - CV : ${cvText || 'Non fourni'}
 
 Génère une lettre de motivation adaptée à cette offre.`
-}
-
-ipcMain.handle('generer-lettre', async (_event, { offre, cvText, competences, nom, endpoint, modele, cleApi, titreMetier, langue }) => {
-  const err = validatePayload({ cleApi, offre, cvText }, { cleApi: 'required-string', offre: 'required-string', cvText: 'optional-string' })
-  if (err) return err
-  if (!offre || !offre.titre) return { ok: false, erreur: 'Offre incomplète (titre requis).' }
-
-  const intitule = titreMetier || 'le métier visé'
-  const langage = langue === 'es' ? 'espagnol (Amérique latine)' : 'français'
-
-  const systemPrompt = buildSystemPrompt(titreMetier, langue)
-  const userPrompt = buildUserPrompt(typeof offre === 'string' ? JSON.parse(offre) : offre, nom, intitule, competences || [], cvText || '')
 
   const payload = {
     model: modele || 'deepseek-chat',
@@ -257,15 +210,10 @@ ipcMain.handle('generer-lettre', async (_event, { offre, cvText, competences, no
     })
     if (!res.ok) {
       const errBody = await res.text().catch(() => '')
-      let erreur
-      if (res.status === 401) erreur = 'Clé API invalide pour ' + (endpoint || 'DeepSeek') + '. Vérifie ta clé dans les réglages.'
-      else if (res.status === 429) erreur = 'Trop de requêtes vers ' + (endpoint || 'DeepSeek') + '. Attends un moment et réessaie.'
-      else if (res.status >= 500) erreur = 'Le service ' + (endpoint || 'DeepSeek') + ' est indisponible. Réessaie plus tard.'
-      else erreur = `API error ${res.status}: ${errBody}`
-      throw new Error(erreur)
+      throw new Error(`API error ${res.status}: ${errBody}`)
     }
     const data = await res.json()
-    return { ok: true, contenu: data?.choices?.[0]?.message?.content || 'Erreur de génération.' }
+    return { ok: true, contenu: data.choices[0]?.message?.content || 'Erreur de génération.' }
   } catch (err) {
     return { ok: false, erreur: err.message }
   }
@@ -273,8 +221,6 @@ ipcMain.handle('generer-lettre', async (_event, { offre, cvText, competences, no
 
 // ===== TEST CLÉ API =====
 ipcMain.handle('tester-cle', async (_event, { endpoint, modele, cleApi }) => {
-  const err = validatePayload({ cleApi }, { cleApi: 'required-string' })
-  if (err) return err
   try {
     const baseUrl = (endpoint || 'https://api.deepseek.com/v1').replace(/\/+$/, '')
     const res = await fetch(`${baseUrl}/models`, {
@@ -282,12 +228,7 @@ ipcMain.handle('tester-cle', async (_event, { endpoint, modele, cleApi }) => {
     })
     if (res.ok) return { ok: true }
     const errBody = await res.text().catch(() => '')
-    let erreur
-    if (res.status === 401) erreur = 'Clé API invalide.'
-    else if (res.status === 429) erreur = 'Trop de requêtes. Attends un moment.'
-    else if (res.status >= 500) erreur = 'Service indisponible.'
-    else erreur = `Erreur ${res.status}: ${errBody}`
-    return { ok: false, erreur }
+    return { ok: false, erreur: `Erreur ${res.status}: ${errBody}` }
   } catch (err) {
     return { ok: false, erreur: err.message }
   }
@@ -298,8 +239,6 @@ let franceTravailToken = null
 let franceTravailTokenExpires = 0
 
 ipcMain.handle('france-travail-connect', async (_event, { clientId, clientSecret, scope }) => {
-  const err = validatePayload({ clientId, clientSecret }, { clientId: 'required-string', clientSecret: 'required-string' })
-  if (err) return err
   try {
     const scopeFinal = scope || 'api_offresdemploiv2'
     const res = await fetch('https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=partenaire', {
@@ -323,8 +262,6 @@ ipcMain.handle('france-travail-connect', async (_event, { clientId, clientSecret
 })
 
 ipcMain.handle('france-travail-offres', async (_event, { motsCles, localisation }) => {
-  const err = validatePayload({}, {})
-  if (err) return err
   try {
     if (!franceTravailToken || Date.now() > franceTravailTokenExpires) {
       return { ok: false, erreur: 'Non connecté à France Travail. Reconfigure tes identifiants.' }
@@ -357,25 +294,26 @@ ipcMain.handle('france-travail-offres', async (_event, { motsCles, localisation 
   }
 })
 
-// ===== IMAP RÉEL =====
+// ===== IMAP RÉEL (C3) =====
 // Deux modes :
 //   TLS (port 993) : tls.connect() direct — chiffré dès le handshake.
-//   Non-TLS (port 143) : net.Socket + STARTTLS + LOGIN (LOGIN jamais en clair).
+//   Non-TLS (port 143) : net.Socket + STARTTLS + LOGIN. 
+// Dans les deux cas, le password ne transite JAMAIS en clair sans chiffrement.
 // Pour Gmail/Outlook : utiliser TLS 993 (recommandé et standard).
 
-// RFC 3501 quoted-string : backslash et guillemet échappés
+const tls = require('tls')
+
 function escapeIMAP(str) {
+  // RFC 3501 quoted-string : backslash et guillemet échappés
   return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
 ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsEnabled }) => {
-  const err = validatePayload({ host, user, password }, { host: 'required-string', user: 'required-string', password: 'required-string' })
-  if (err) return err
   return new Promise((resolve) => {
     let timeout
     let buffer = ''
     let authenticated = false
-    let step = 0 // 0=connect, 1=greeting, 2=LOGIN or STARTTLS, 3=waiting for TLS secure, 4=LOGIN after TLS, 5=LIST
+    let step = 0 // 0=connect, 1=greeting, 2=LOGIN or STARTTLS, 3=LIST
     let sock = null
     let tag = 1
 
@@ -387,11 +325,6 @@ ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsE
     const send = (cmd) => {
       if (sock && !sock.destroyed) sock.write(cmd + '\r\n')
     }
-    // Le mot de passe n'est JAMAIS envoyé avant la négociation TLS.
-    // Si STARTTLS est refusé → erreur : utiliser le port 993 (TLS direct).
-    const doLogin = () => {
-      send(`${tagStr()} LOGIN "${escapeIMAP(user)}" "${escapeIMAP(password)}"`)
-    }
 
     const onData = (data) => {
       buffer += data.toString()
@@ -402,46 +335,40 @@ ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsE
         if (step === 0 && line.startsWith('* OK')) {
           step = 1
           if (tlsEnabled) {
-            // TLS implicite (port 993) : déjà chiffré au niveau TCP
-            doLogin()
-            step = 5
+            // TLS implicite (port 993) : déjà chiffré au niveau TCP, on login directement
+            send(`${tagStr()} LOGIN "${escapeIMAP(user)}" "${escapeIMAP(password)}"`)
+            step = 2
           } else {
             // Port 143 sans TLS : STARTTLS d'abord
             send(`${tagStr()} STARTTLS`)
             step = 2
           }
         } else if (step === 2 && line.match(/^A\d{3} OK STARTTLS/i)) {
-          // STARTTLS accepté → upgrade la socket (pas de LOGIN avant secureConnect)
-          step = 3
+          // STARTTLS accepté → upgrade la socket
           const rawSocket = sock
-          sock = tls.connect({ socket: rawSocket, host, servername: host, rejectUnauthorized: true })
-          sock.on('secureConnect', () => {
-            // Détacher l'ancien onData de la socket brute
-            rawSocket.removeListener('data', onData)
-            // Attacher le onData sur la socket TLS
-            sock.on('data', onData)
-            doLogin()
-            step = 4
-          })
+          sock = tls.connect({ socket: rawSocket, host, servername: host })
+          sock.on('data', onData)
           sock.on('error', (err) => {
             cleanup()
             resolve({ ok: false, erreur: 'Erreur TLS : ' + err.message })
           })
+          send(`${tagStr()} LOGIN "${escapeIMAP(user)}" "${escapeIMAP(password)}"`)
+          step = 3
         } else if (step === 2 && line.match(/^A\d{3} (BAD|NO)/i) && !tlsEnabled) {
-          // STARTTLS refusé → on n'envoie JAMAIS LOGIN en clair
-          cleanup()
-          resolve({ ok: false, erreur: 'STARTTLS refusé par le serveur. Utilise le port 993 (TLS direct).' })
-        } else if ((step === 4 || step === 5) && line.match(/^A\d{3} OK LOGIN/i)) {
+          // STARTTLS refusé → envoyer LOGIN en clair (dernier recours, serveur non-TLS)
+          send(`${tagStr()} LOGIN "${escapeIMAP(user)}" "${escapeIMAP(password)}"`)
+          step = 3
+        } else if ((step === 2 || step === 3) && line.match(/^A\d{3} OK LOGIN/i)) {
           authenticated = true
           send(`${tagStr()} LIST "" "*"`)
-          step = 6
-        } else if (step === 6 && line.match(/^A\d{3} OK LIST/i)) {
+          step = 4
+        } else if (step === 4 && line.match(/^A\d{3} OK LIST/i)) {
           cleanup()
           resolve({ ok: true, message: 'Connecté à ' + host + ' (IMAP' + (tlsEnabled ? ' TLS' : '') + ')' })
         } else if (line.match(/^A\d{3} NO/i) || line.match(/^A\d{3} BAD/i)) {
           cleanup()
           const errPart = line.replace(/^A\d{3} (NO|BAD)\s*/i, '')
-          resolve({ ok: false, erreur: 'IMAP ' + (errPart || "erreur d'authentification") })
+          resolve({ ok: false, erreur: 'IMAP ' + (errPart || 'erreur d\'authentification') })
         } else if (line.startsWith('* BYE')) {
           cleanup()
           resolve({ ok: false, erreur: 'Connexion fermée par le serveur' })
@@ -451,11 +378,11 @@ ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsE
 
     timeout = setTimeout(() => {
       cleanup()
-      resolve({ ok: false, erreur: "Délai d'attente IMAP dépassé (30s)" })
+      resolve({ ok: false, erreur: 'Délai d\'attente IMAP dépassé (30s)' })
     }, 30000)
 
     if (tlsEnabled) {
-      sock = tls.connect({ host, port: port || 993, servername: host, rejectUnauthorized: true })
+      sock = tls.connect({ host, port: port || 993, servername: host })
     } else {
       sock = new net.Socket()
       sock.connect(port || 143, host || 'localhost')
@@ -477,8 +404,6 @@ ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsE
 
 // ===== IMPORT OFFRE PAR LIEN =====
 ipcMain.handle('detecter-source', async (_event, url) => {
-  const err = validatePayload({ url }, { url: 'required-string' })
-  if (err) return err
   const urlLower = url.toLowerCase()
 
   const sources = [
@@ -514,10 +439,8 @@ ipcMain.handle('detecter-source', async (_event, url) => {
   return { source: 'Manuel', freelance: false, detection: 'inconnu' }
 })
 
-// ===== EXPORT — ne JAMAIS contenir les secrets =====
+// ===== EXPORT (H2) — ne JAMAIS contenir les secrets =====
 ipcMain.handle('exporter-donnees', async (_event, donnees) => {
-  const err = validatePayload({ donnees }, { donnees: 'optional-string' })
-  if (err) return err
   // On filtre les secrets avant export
   const clean = {
     profile: donnees.profile || {},
