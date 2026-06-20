@@ -1,35 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useStore } from '../store/useStore'
 import { Eye, EyeOff, Sparkles, Check, X, RefreshCw, Mail, Database, Settings } from 'lucide-react'
-
-const PRESETS = [
-  { nom: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', modele: 'deepseek-chat', icone: '🟡', gratuit: true },
-  { nom: 'Groq', endpoint: 'https://api.groq.com/openai/v1', modele: 'llama-3.3-70b-versatile', icone: '🟢', gratuit: true },
-  { nom: 'OpenAI', endpoint: 'https://api.openai.com/v1', modele: 'gpt-4o-mini', icone: '🔵', gratuit: false },
-]
-
-function Carte({ titre, icone, children }: { titre: string; icone?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl bg-white border border-bordure shadow-sm p-6">
-      <div className="flex items-center gap-2 mb-4">
-        {icone && <span className="text-ambre">{icone}</span>}
-        <h2 className="text-lg font-semibold text-cacao">{titre}</h2>
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function Champ({ valeur, onChange, placeholder, type, rows }: {
-  valeur: string; onChange: (v: string) => void; placeholder: string; type?: string; rows?: number
-}) {
-  const cls = "w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30 transition-all"
-  if (rows) return <textarea value={valeur} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} className={`${cls} resize-y`} />
-  return <input value={valeur} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} type={type || 'text'} className={cls} />
-}
+import { Carte, Champ } from './ui'
 
 export default function OngletReglages() {
-  const { settings, updateSettings } = useStore()
+  const PRESETS = [
+    { nom: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', modele: 'deepseek-chat', icone: '🟡', gratuit: true },
+    { nom: 'Groq', endpoint: 'https://api.groq.com/openai/v1', modele: 'llama-3.3-70b-versatile', icone: '🟢', gratuit: true },
+    { nom: 'OpenAI', endpoint: 'https://api.openai.com/v1', modele: 'gpt-4o-mini', icone: '🔵', gratuit: false },
+    { nom: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', modele: 'gemini-2.5-flash', icone: '✨', gratuit: true },
+  ]
+
+  const settings = useStore((s) => s.settings)
+  const updateSettings = useStore((s) => s.updateSettings)
   const [showKey, setShowKey] = useState(false)
   const [testResult, setTestResult] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
   const [testMessage, setTestMessage] = useState('')
@@ -53,10 +36,14 @@ export default function OngletReglages() {
       setSecretsLoaded(true)
     }
     loadSecrets()
-  }, [])
+  }, [updateSettings])
 
   const sauvegarderSecrets = useCallback(async () => {
     if (!window.electronAPI?.sauvegarderSecrets) return
+    // Ne pas écraser les secrets existants si la clé API a été effacée accidentellement
+    const secretsExistants = await window.electronAPI.chargerSecrets().catch(() => ({} as Record<string, unknown>))
+    const aDejaUneCle = !!(secretsExistants as Record<string, string>)?.cleApi
+    if (!settings.cleApi && aDejaUneCle) return // garder les anciens secrets
     await window.electronAPI.sauvegarderSecrets({
       cleApi: settings.cleApi, franceTravailClientId: settings.franceTravailClientId,
       franceTravailClientSecret: settings.franceTravailClientSecret,
@@ -69,7 +56,7 @@ export default function OngletReglages() {
       const timer = setTimeout(() => sauvegarderSecrets(), 2000)
       return () => clearTimeout(timer)
     }
-  }, [settings.cleApi, settings.franceTravailClientId, settings.franceTravailClientSecret, settings.imapHost, settings.imapPort, settings.imapUser, settings.imapPassword, secretsLoaded])
+  }, [settings.cleApi, settings.franceTravailClientId, settings.franceTravailClientSecret, settings.imapHost, settings.imapPort, settings.imapUser, settings.imapPassword, secretsLoaded, sauvegarderSecrets])
 
   const appliquerPreset = (p: typeof PRESETS[0]) => updateSettings({ endpoint: p.endpoint, modele: p.modele })
 
@@ -112,7 +99,7 @@ export default function OngletReglages() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
-        <Settings className="w-7 h-7 text-ambre" />
+        <Settings className="w-7 h-7 text-action" />
         <h1 className="text-2xl font-bold text-cacao">Réglages</h1>
         <p className="text-sm text-taupe ml-auto">Les secrets sont chiffrés sur ton ordinateur</p>
       </div>
@@ -121,7 +108,7 @@ export default function OngletReglages() {
       <Carte titre="Générateur de lettres (LLM)" icone={<Sparkles className="w-5 h-5" />}>
         {!settings.cleApi && (
           <div className="bg-ambre/5 border border-ambre/30 rounded-xl p-4 text-sm text-cacao flex items-start gap-3 mb-4">
-            <Sparkles className="w-5 h-5 text-ambre flex-shrink-0 mt-0.5" />
+            <Sparkles className="w-5 h-5 text-action flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-medium">Bienvenue !</p>
               <p className="text-sm text-taupe mt-1">Pour générer des lettres, il te faut une clé API. Choisis un fournisseur gratuit ci-dessous, crée un compte et colle ta clé.</p>
@@ -130,15 +117,18 @@ export default function OngletReglages() {
         )}
 
         <label className="block text-sm font-medium text-cacao mb-2">Fournisseur</label>
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-3 mb-4">
           {PRESETS.map((p) => (
             <button key={p.nom} onClick={() => appliquerPreset(p)}
-              className={`px-4 py-3 rounded-xl text-base text-left transition-all ${
+              className={`relative px-4 py-3 rounded-xl text-base text-left transition-all ${
                 settings.endpoint === p.endpoint
-                  ? 'bg-ambre/10 border-2 border-ambre text-cacao font-medium'
+                  ? 'bg-ambre/10 border-2 border-ambre text-cacao font-medium pr-10'
                   : 'bg-creme border border-bordure text-taupe hover:bg-sable/20'
               }`}
             >
+              {settings.endpoint === p.endpoint && (
+                <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-action shrink-0" />
+              )}
               <span className="text-lg">{p.icone}</span>
               <span className="block mt-1">{p.nom}</span>
               {p.gratuit && <span className="text-xs text-vert-success">gratuit</span>}
@@ -151,7 +141,7 @@ export default function OngletReglages() {
           <input type={showKey ? 'text' : 'password'} value={settings.cleApi}
             onChange={(e) => updateSettings({ cleApi: e.target.value })}
             placeholder="sk-..."
-            className="w-full px-4 py-3 pr-12 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30"
+            className="w-full px-4 py-3 pr-12 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
           />
           <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-taupe hover:text-cacao transition-colors">
             {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -179,7 +169,7 @@ export default function OngletReglages() {
           <Champ valeur={settings.franceTravailClientId || ''} onChange={(v) => updateSettings({ franceTravailClientId: v })} placeholder="Client ID France Travail" />
           <input type="password" value={settings.franceTravailClientSecret || ''} onChange={(e) => updateSettings({ franceTravailClientSecret: e.target.value })}
             placeholder="Client Secret France Travail"
-            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30"
+            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
           />
           <div className="flex items-center gap-3">
             <button onClick={testerFranceTravail} className="bg-sable text-cacao rounded-xl px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-all">Connecter France Travail</button>
@@ -195,19 +185,19 @@ export default function OngletReglages() {
           <Champ valeur={settings.imapHost || ''} onChange={(v) => updateSettings({ imapHost: v })} placeholder="Serveur IMAP (ex: imap.gmail.com)" />
           <input type="number" value={settings.imapPort || ''} onChange={(e) => updateSettings({ imapPort: parseInt(e.target.value) || 143 })}
             placeholder="Port (143 ou 993)"
-            className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30"
+            className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
           />
         </div>
         <div className="space-y-3 mb-3">
           <Champ valeur={settings.imapUser || ''} onChange={(v) => updateSettings({ imapUser: v })} placeholder="Adresse email" />
           <input type="password" value={settings.imapPassword || ''} onChange={(e) => updateSettings({ imapPassword: e.target.value })}
             placeholder="Mot de passe ou mot de passe d'application"
-            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30"
+            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
           />
         </div>
         <label className="flex items-center gap-2 text-sm text-cacao mb-3 cursor-pointer">
           <input type="checkbox" checked={settings.imapTLS} onChange={(e) => updateSettings({ imapTLS: e.target.checked })}
-            className="w-4 h-4 rounded border-bordure text-ambre focus:ring-ambre/30"
+            className="w-4 h-4 rounded border-bordure text-action focus:ring-action/30"
           />
           Utiliser TLS/SSL (port 993)
         </label>
@@ -216,17 +206,6 @@ export default function OngletReglages() {
           {imapResult && <span className={`text-sm ${imapResult.startsWith('✓') ? 'text-vert-success' : 'text-rouge-error'}`}>{imapResult}</span>}
         </div>
         <p className="text-sm text-taupe/60 mt-2">Pour Gmail : active l'authentification à 2 facteurs et crée un mot de passe d'application.</p>
-      </Carte>
-
-      {/* Langue */}
-      <Carte titre="Langue des lettres">
-        <select value={settings.langue} onChange={(e) => updateSettings({ langue: e.target.value })}
-          className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base focus:outline-none focus:ring-2 focus:ring-ambre/30"
-        >
-          <option value="fr">Français</option>
-          <option value="es">Español (América Latina)</option>
-        </select>
-        <p className="text-sm text-taupe/60 mt-2">Les lettres de motivation seront générées dans cette langue.</p>
       </Carte>
 
       {/* Sécurité */}

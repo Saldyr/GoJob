@@ -4,7 +4,9 @@ import { joursDepuis } from '../utils/offres'
 import { Briefcase, Plus, ExternalLink, Trash2, FileText, MapPin } from 'lucide-react'
 
 export default function OngletOffres() {
-  const { offres, addOffre, removeOffre } = useStore()
+  const offres = useStore((s) => s.offres)
+  const addOffre = useStore((s) => s.addOffre)
+  const removeOffre = useStore((s) => s.removeOffre)
   const [showForm, setShowForm] = useState(false)
   const [url, setUrl] = useState('')
   const [manuel, setManuel] = useState({ titre: '', entreprise: '', source: '', ville: '' })
@@ -41,18 +43,18 @@ export default function OngletOffres() {
 
   const triStatut: Offre['statut'][] = ['a_postuler', 'postulee', 'relancee', 'entretien', 'refus', 'acceptee']
   const statutLabels: Record<string, string> = { a_postuler: 'À postuler', postulee: 'Postulée', relancee: 'Relancée', entretien: 'En entretien', refus: 'Refus', acceptee: 'Acceptée' }
-  const statutCouleurs: Record<string, string> = { a_postuler: 'bg-taupe/20 text-taupe', postulee: 'bg-sable/20 text-cacao', relancee: 'bg-ambre/10 text-ambre', entretien: 'bg-vert-success/10 text-vert-success', refus: 'bg-rouge-error/10 text-rouge-error', acceptee: 'bg-vert-success/20 text-vert-success' }
+  const statutCouleurs: Record<string, string> = { a_postuler: 'bg-taupe/20 text-taupe', postulee: 'bg-sable/20 text-cacao', relancee: 'bg-ambre/10 text-action', entretien: 'bg-vert-success/10 text-vert-success', refus: 'bg-rouge-error/10 text-rouge-error', acceptee: 'bg-vert-success/20 text-vert-success' }
 
   if (offres.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <Briefcase className="w-7 h-7 text-ambre" />
+            <Briefcase className="w-7 h-7 text-action" />
             <h1 className="text-2xl font-bold text-cacao">Mes offres</h1>
           </div>
           <button onClick={() => setShowForm(true)}
-            className="bg-ambre text-white rounded-xl px-5 py-2.5 flex items-center gap-2 hover:opacity-90 transition-all font-medium">
+            className="bg-action text-white rounded-xl px-5 py-2.5 flex items-center gap-2 hover:opacity-90 transition-all font-medium">
             <Plus className="w-5 h-5" /> Ajouter
           </button>
         </div>
@@ -62,7 +64,7 @@ export default function OngletOffres() {
           <h2 className="text-xl font-semibold text-cacao mb-2">Aucune offre</h2>
           <p className="text-base text-taupe mb-6">Ajoute ta première offre d'emploi.</p>
           <button onClick={() => setShowForm(true)}
-            className="bg-ambre text-white rounded-xl px-6 py-3 flex items-center gap-2 hover:opacity-90 transition-all font-medium">Ajouter une offre</button>
+            className="bg-action text-white rounded-xl px-6 py-3 flex items-center gap-2 hover:opacity-90 transition-all font-medium">Ajouter une offre</button>
         </div>
 
         {showForm && formulaireAjout()}
@@ -93,7 +95,7 @@ export default function OngletOffres() {
               placeholder="Ville" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30" />
           </div>
           <button onClick={ajouterManuellement} disabled={!manuel.titre.trim() || !manuel.entreprise.trim()}
-            className="w-full bg-ambre text-white rounded-xl px-5 py-3 text-base font-medium hover:opacity-90 disabled:opacity-40 transition-all">Ajouter l'offre</button>
+            className="w-full bg-action text-white rounded-xl px-5 py-3 text-base font-medium hover:opacity-90 disabled:opacity-40 transition-all">Ajouter l'offre</button>
         </div>
       </div>
     )
@@ -105,11 +107,11 @@ export default function OngletOffres() {
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3">
-          <Briefcase className="w-7 h-7 text-ambre" />
+          <Briefcase className="w-7 h-7 text-action" />
           <h1 className="text-2xl font-semibold text-cacao">Mes offres <span className="text-taupe text-lg font-normal ml-1">({offres.length})</span></h1>
         </div>
         <button onClick={() => setShowForm(!showForm)}
-          className="bg-ambre text-white rounded-xl px-5 py-2.5 flex items-center gap-2 hover:opacity-90 transition-all font-medium">
+          className="bg-action text-white rounded-xl px-5 py-2.5 flex items-center gap-2 hover:opacity-90 transition-all font-medium">
           <Plus className="w-5 h-5" />{showForm ? 'Fermer' : 'Ajouter'}</button>
       </div>
 
@@ -142,7 +144,7 @@ export default function OngletOffres() {
                         {statutLabels[o.statut] || o.statut}
                       </span>
                       <div className="flex items-center gap-2">
-                        {o.url && <a href={o.url} target="_blank" rel="noreferrer" className="p-2 text-taupe hover:text-ambre transition-colors rounded-lg hover:bg-ambre/5"><ExternalLink className="w-4 h-4" /></a>}
+                        {o.url && <a href={o.url} target="_blank" rel="noreferrer" className="p-2 text-taupe hover:text-action transition-colors rounded-lg hover:bg-ambre/5"><ExternalLink className="w-4 h-4" /></a>}
                         <button onClick={() => removeOffre(o.id)} className="p-2 text-taupe hover:text-rouge-error transition-colors rounded-lg hover:bg-rouge-error/5"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>

@@ -25,7 +25,7 @@ export default function Sidebar() {
         {/* Logo + titre */}
         <div className="px-6 pt-7 pb-5 border-b border-bordure">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-ambre" />
+            <Sparkles className="w-6 h-6 text-action" />
             <h1 className="text-2xl font-bold text-cacao tracking-tight">GoJob</h1>
           </div>
           <p className="text-sm text-taupe mt-1">Assistant de recherche d'emploi</p>
@@ -39,7 +39,7 @@ export default function Sidebar() {
               onClick={() => setCurrentTab(id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-all
                 ${currentTab === id
-                  ? 'bg-ambre text-white shadow-sm'
+                  ? 'bg-action text-white shadow-sm'
                   : 'text-cacao/70 hover:bg-white/60 hover:text-cacao'
                 }`}
             >
@@ -90,7 +90,7 @@ export default function Sidebar() {
             </ol>
             <button
               onClick={() => setShowInfo(false)}
-              className="mt-5 w-full bg-ambre text-white rounded-xl px-5 py-3 text-base font-medium hover:opacity-90 transition-all"
+              className="mt-5 w-full bg-action text-white rounded-xl px-5 py-3 text-base font-medium hover:opacity-90 transition-all"
             >
               Compris !
             </button>

@@ -1,9 +1,11 @@
+import { Calendar, MessageSquare, CheckCircle, Briefcase, XCircle } from 'lucide-react'
+import { Carte, StatutBadge } from './ui'
 import { useStore, type Offre } from '../store/useStore'
 import { joursDepuis } from '../utils/offres'
-import { Calendar, MessageSquare, CheckCircle, Briefcase, XCircle } from 'lucide-react'
 
 export default function OngletSuivi() {
-  const { offres, updateOffre } = useStore()
+  const offres = useStore((s) => s.offres)
+  const updateOffre = useStore((s) => s.updateOffre)
 
   const offresActives = offres.filter((o) => o.statut !== 'a_postuler' && o.statut !== 'refus' && o.statut !== 'acceptee')
   const refus = offres.filter((o) => o.statut === 'refus').length
@@ -24,43 +26,11 @@ export default function OngletSuivi() {
     updateOffre(id, { statut: 'relancee', dateRelance: new Date().toISOString() })
   }
 
-  function Carte({ titre, icone, children }: { titre: string; icone?: React.ReactNode; children: React.ReactNode }) {
-    return (
-      <section className="rounded-2xl bg-white border border-bordure shadow-sm p-6">
-        <div className="flex items-center gap-2 mb-4">
-          {icone && <span className="text-ambre">{icone}</span>}
-          <h2 className="text-lg font-semibold text-cacao">{titre}</h2>
-        </div>
-        {children}
-      </section>
-    )
-  }
-
-  function Badge({ statut }: { statut: Offre['statut'] }) {
-    const styles: Record<string, string> = {
-      postulee: 'bg-sable/20 text-cacao',
-      relancee: 'bg-ambre/10 text-ambre',
-      entretien: 'bg-vert-success/10 text-vert-success',
-      refus: 'bg-rouge-error/10 text-rouge-error',
-      acceptee: 'bg-vert-success/20 text-vert-success',
-      a_postuler: 'bg-taupe/10 text-taupe',
-    }
-    const labels: Record<string, string> = {
-      postulee: 'Postulée', relancee: 'Relancée', entretien: 'Entretien',
-      refus: 'Refus', acceptee: 'Acceptée', a_postuler: 'À postuler',
-    }
-    return (
-      <span className={`text-sm px-3 py-1 rounded-lg font-medium ${styles[statut] || ''}`}>
-        {labels[statut] || statut}
-      </span>
-    )
-  }
-
   if (offresActives.length === 0 && refus === 0 && acceptees === 0) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3 mb-2">
-          <Calendar className="w-7 h-7 text-ambre" />
+          <Calendar className="w-7 h-7 text-action" />
           <h1 className="text-2xl font-bold text-cacao">Suivi</h1>
         </div>
         <div className="rounded-2xl bg-white border border-bordure shadow-sm p-12 text-center">
@@ -75,7 +45,7 @@ export default function OngletSuivi() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
-        <Calendar className="w-7 h-7 text-ambre" />
+        <Calendar className="w-7 h-7 text-action" />
         <h1 className="text-2xl font-bold text-cacao">Suivi des candidatures</h1>
       </div>
 
@@ -86,7 +56,7 @@ export default function OngletSuivi() {
           <p className="text-sm text-taupe mt-1">En cours</p>
         </div>
         <div className="rounded-2xl bg-white border border-bordure shadow-sm p-5 text-center">
-          <p className="text-3xl font-bold text-ambre">{aRelancer.length}</p>
+          <p className="text-3xl font-bold text-action">{aRelancer.length}</p>
           <p className="text-sm text-taupe mt-1">À relancer</p>
         </div>
         <div className="rounded-2xl bg-white border border-bordure shadow-sm p-5 text-center">
@@ -110,7 +80,7 @@ export default function OngletSuivi() {
                     <h3 className="text-lg font-semibold text-cacao">{o.titre}</h3>
                     <p className="text-base text-taupe">{o.entreprise}</p>
                   </div>
-                  <Badge statut={o.statut} />
+                  <StatutBadge statut={o.statut} />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-taupe">
@@ -121,14 +91,14 @@ export default function OngletSuivi() {
                 {besoinRelance(o) && (
                   <button
                     onClick={() => marquerRelance(o.id)}
-                    className="mt-3 bg-ambre text-white rounded-xl px-4 py-2 text-sm flex items-center gap-1.5 hover:opacity-90 transition-all font-medium"
+                    className="mt-3 bg-action text-white rounded-xl px-4 py-2 text-sm flex items-center gap-1.5 hover:opacity-90 transition-all font-medium"
                   >
                     <MessageSquare className="w-4 h-4" /> Marquer comme relancée
                   </button>
                 )}
 
                 {o.url && (
-                  <a href={o.url} target="_blank" rel="noreferrer" className="text-sm text-ambre hover:underline mt-2 inline-block">
+                  <a href={o.url} target="_blank" rel="noreferrer" className="text-sm text-action hover:underline mt-2 inline-block">
                     Voir l'offre →
                   </a>
                 )}
@@ -155,7 +125,7 @@ export default function OngletSuivi() {
                     <span className="text-sm text-taupe ml-2">— {o.entreprise}</span>
                   </div>
                 </div>
-                <Badge statut={o.statut} />
+                <StatutBadge statut={o.statut} />
               </div>
             ))}
           </div>

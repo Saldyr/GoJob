@@ -1,9 +1,23 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import { User, Brain, Globe, GraduationCap, Plus, X, File, Upload, Save } from 'lucide-react'
+import { Carte, Champ } from './ui'
+
+function Chip({ label, onRetirer }: { label: string; onRetirer: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-sable/20 text-cacao rounded-lg px-3 py-1.5 text-sm">
+      {label}
+      <button onClick={onRetirer} className="text-taupe hover:text-cacao transition-colors"><X className="w-3.5 h-3.5" /></button>
+    </span>
+  )
+}
 
 export default function OngletProfil() {
-  const { profile, updateProfile, documents, addDocument, removeDocument } = useStore()
+  const profile = useStore((s) => s.profile)
+  const documents = useStore((s) => s.documents)
+  const updateProfile = useStore((s) => s.updateProfile)
+  const addDocument = useStore((s) => s.addDocument)
+  const removeDocument = useStore((s) => s.removeDocument)
   const [importMessage, setImportMessage] = useState('')
 
   const [nouvelleCompetence, setNouvelleCompetence] = useState('')
@@ -45,150 +59,121 @@ export default function OngletProfil() {
     updateProfile({ typesPostes: profile.typesPostes.filter((_, i) => i !== idx) })
   }
 
-  const handleImporter = async () => {
-    if (!window.electronAPI?.importerCv) { setImportMessage('Fonction disponible uniquement dans l\'application desktop.'); return }
-    setImportMessage('')
-    const result = await window.electronAPI.importerCv()
-    if (result.ok) {
-      addDocument({ id: '', nom: result.nom, type: 'cv', texte: result.texte, dateAjout: new Date().toISOString(), chemin: result.chemin })
-      updateProfile({ cvText: result.texte })
-      setImportMessage('✓ CV importé : ' + result.nom)
-    } else { setImportMessage('✗ ' + (result.erreur || 'Échec de l\'import')) }
+  const handleImportDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!window.electronAPI?.importerCv) return
+    const res = await window.electronAPI.importerCv()
+    if (res.ok) {
+      addDocument({ nom: res.nom || 'CV importé', texte: res.texte, type: 'cv', id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), dateAjout: new Date().toISOString() })
+      setImportMessage('Importé !')
+    } else {
+      setImportMessage(`Erreur : ${res.erreur}`)
+    }
+    e.target.value = ''
+    setTimeout(() => setImportMessage(''), 3000)
   }
-
-  function Chip({ label, onRetirer }: { label: string; onRetirer: () => void }) {
-    return (
-      <span className="inline-flex items-center gap-1.5 bg-sable/20 text-cacao rounded-lg px-3 py-1.5 text-sm">
-        {label}
-        <button onClick={onRetirer} className="text-taupe hover:text-cacao transition-colors"><X className="w-3.5 h-3.5" /></button>
-      </span>
-    )
-  }
-
-  function Section({ titre, icone, children }: { titre: string; icone?: React.ReactNode; children: React.ReactNode }) {
-    return (
-      <section className="rounded-2xl bg-white border border-bordure shadow-sm p-6">
-        <div className="flex items-center gap-2 mb-4">
-          {icone && <span className="text-ambre">{icone}</span>}
-          <h2 className="text-lg font-semibold text-cacao">{titre}</h2>
-        </div>
-        {children}
-      </section>
-    )
-  }
-
-  function Champ({ valeur, onChange, placeholder, type }: { valeur: string; onChange: (v: string) => void; placeholder: string; type?: string }) {
-    return <input value={valeur} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} type={type || 'text'}
-      className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30 transition-all" />
-  }
-
-  const niveaux = ['Débutant', 'Intermédiaire', 'Courant', 'Bilingue']
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-2">
-        <User className="w-7 h-7 text-ambre" />
-        <h1 className="text-2xl font-bold text-cacao">Mon profil</h1>
+        <User className="w-7 h-7 text-action" />
+        <h1 className="text-2xl font-bold text-cacao">Mon Profil</h1>
       </div>
 
-      {/* Identité */}
-      <Section titre="Identité" icone={<User className="w-5 h-5" />}>
+      {/* Infos personnelles */}
+      <Carte titre="Infos personnelles" icone={<User className="w-5 h-5" />}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label className="block text-sm text-taupe mb-1">Nom complet</label>
-            <Champ valeur={profile.nom} onChange={(v) => updateProfile({ nom: v })} placeholder="Prénom Nom" /></div>
-          <div><label className="block text-sm text-taupe mb-1">Email</label>
-            <Champ valeur={profile.email || ''} onChange={(v) => updateProfile({ email: v })} placeholder="email@exemple.com" type="email" /></div>
-          <div><label className="block text-sm text-taupe mb-1">Localisation</label>
-            <Champ valeur={profile.localisation || ''} onChange={(v) => updateProfile({ localisation: v })} placeholder="Ville, Pays" /></div>
+          <Champ valeur={profile.prenom} onChange={(v) => updateProfile({ prenom: v })} placeholder="Prénom" />
+          <Champ valeur={profile.nom} onChange={(v) => updateProfile({ nom: v })} placeholder="Nom" />
+          <Champ valeur={profile.email} onChange={(v) => updateProfile({ email: v })} placeholder="Email" type="email" />
+          <Champ valeur={profile.telephone} onChange={(v) => updateProfile({ telephone: v })} placeholder="Téléphone" type="tel" />
         </div>
-      </Section>
+        <Champ valeur={profile.adresse} onChange={(v) => updateProfile({ adresse: v })} placeholder="Adresse" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+          <Champ valeur={profile.ville} onChange={(v) => updateProfile({ ville: v })} placeholder="Ville" />
+          <Champ valeur={profile.codePostal} onChange={(v) => updateProfile({ codePostal: v })} placeholder="Code postal" />
+        </div>
+      </Carte>
 
-      {/* Titre */}
-      <Section titre="Titre recherché" icone={<GraduationCap className="w-5 h-5" />}>
-        <Champ valeur={profile.titre || ''} onChange={(v) => updateProfile({ titre: v })} placeholder="Ex: Architecte BIM, Chef de projet..." />
-        <p className="text-sm text-taupe/60 mt-2">Ce titre est repris dans les lettres de motivation générées.</p>
-      </Section>
+      {/* Titre / poste */}
+      <Carte titre="Poste recherché" icone={<Brain className="w-5 h-5" />}>
+        <Champ valeur={profile.titre} onChange={(v) => updateProfile({ titre: v })} placeholder="Titre du poste (ex. Développeur Full-Stack)" />
+        <Champ valeur={profile.resume} onChange={(v) => updateProfile({ resume: v })} placeholder="Résumé (2-3 lignes qui te définissent)" rows={3} />
+        <div className="mt-4">
+          <label className="block text-sm text-taupe mb-1">Types de postes</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {profile.typesPostes.map((tp, i) => (
+              <Chip key={`${tp}-${i}`} label={tp} onRetirer={() => retirerTypePoste(i)} />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Champ valeur={nouveauPoste} onChange={setNouveauPoste} placeholder="Ajouter un type de poste" />
+            <button onClick={ajouterTypePoste} className="bg-action text-white rounded-xl px-4 text-sm hover:opacity-90 transition-all font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Ajouter</button>
+          </div>
+        </div>
+      </Carte>
 
       {/* Compétences */}
-      <Section titre="Compétences" icone={<Brain className="w-5 h-5" />}>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {profile.competences.map((c, i) => <Chip key={i} label={c} onRetirer={() => retirerCompetence(i)} />)}
+      <Carte titre="Compétences" icone={<Brain className="w-5 h-5" />}>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {profile.competences.map((c, i) => (
+            <Chip key={`${c}-${i}`} label={c} onRetirer={() => retirerCompetence(i)} />
+          ))}
         </div>
         <div className="flex gap-2">
-          <input value={nouvelleCompetence} onChange={(e) => setNouvelleCompetence(e.target.value)}
-            placeholder="Ajouter une compétence..."
-            className="flex-1 px-4 py-2.5 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30"
-            onKeyDown={(e) => e.key === 'Enter' && ajouterCompetence()} />
-          <button onClick={ajouterCompetence} className="bg-ambre text-white rounded-xl px-4 py-2.5 flex items-center gap-1.5 hover:opacity-90 transition-all font-medium">
-            <Plus className="w-4 h-4" /> Ajouter</button>
+          <Champ valeur={nouvelleCompetence} onChange={setNouvelleCompetence} placeholder="Ajouter une compétence" />
+          <button onClick={ajouterCompetence} className="bg-action text-white rounded-xl px-4 text-sm hover:opacity-90 transition-all font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Ajouter</button>
         </div>
-        <p className="text-sm text-taupe/60 mt-2">Appuie sur Entrée ou clique sur Ajouter.</p>
-      </Section>
+      </Carte>
 
       {/* Langues */}
-      <Section titre="Langues" icone={<Globe className="w-5 h-5" />}>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {profile.langues.map((l, i) => <Chip key={i} label={`${l.langue} · ${l.niveau}`} onRetirer={() => retirerLangue(i)} />)}
+      <Carte titre="Langues" icone={<Globe className="w-5 h-5" />}>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {profile.langues.map((l, i) => (
+            <Chip key={`${l.langue}-${i}`} label={`${l.langue} — ${l.niveau}`} onRetirer={() => retirerLangue(i)} />
+          ))}
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <input value={ajoutLangue} onChange={(e) => setAjoutLangue(e.target.value)} placeholder="Langue..."
-            className="flex-1 min-w-[140px] px-4 py-2.5 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30"
-            onKeyDown={(e) => e.key === 'Enter' && ajouterLangue()} />
+        <div className="flex gap-2 items-start">
+          <Champ valeur={ajoutLangue} onChange={setAjoutLangue} placeholder="Langue" />
           <select value={ajoutNiveau} onChange={(e) => setAjoutNiveau(e.target.value)}
-            className="px-4 py-2.5 rounded-xl border border-bordure bg-white text-cacao text-base focus:outline-none focus:ring-2 focus:ring-ambre/30">
-            {niveaux.map(n => <option key={n} value={n}>{n}</option>)}
+            className="px-3 py-3 rounded-xl border border-bordure bg-white text-cacao text-base focus:outline-none focus:ring-2 focus:ring-action/30">
+            <option>Débutant</option><option>Intermédiaire</option><option>Avancé</option><option>Natif</option>
           </select>
-          <button onClick={ajouterLangue} className="bg-ambre text-white rounded-xl px-4 py-2.5 flex items-center gap-1.5 hover:opacity-90 transition-all font-medium">
-            <Plus className="w-4 h-4" /> Ajouter</button>
+          <button onClick={ajouterLangue} className="bg-action text-white rounded-xl px-4 text-sm hover:opacity-90 transition-all font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Ajouter</button>
         </div>
-      </Section>
+      </Carte>
 
-      {/* Postes visés */}
-      <Section titre="Postes visés" icone={<GraduationCap className="w-5 h-5" />}>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {profile.typesPostes.map((p, i) => <Chip key={i} label={p} onRetirer={() => retirerTypePoste(i)} />)}
-        </div>
-        <div className="flex gap-2">
-          <input value={nouveauPoste} onChange={(e) => setNouveauPoste(e.target.value)} placeholder="Ex: Architecte BIM, Coordinateur..."
-            className="flex-1 px-4 py-2.5 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30"
-            onKeyDown={(e) => e.key === 'Enter' && ajouterTypePoste()} />
-          <button onClick={ajouterTypePoste} className="bg-ambre text-white rounded-xl px-4 py-2.5 flex items-center gap-1.5 hover:opacity-90 transition-all font-medium">
-            <Plus className="w-4 h-4" /> Ajouter</button>
-        </div>
-      </Section>
-
-      {/* CV texte */}
-      <Section titre="CV (texte)" icone={<File className="w-5 h-5" />}>
-        <textarea value={profile.cvText} onChange={(e) => updateProfile({ cvText: e.target.value })}
-          placeholder="Colle ici le texte de ton CV (parcours, expériences, formations)..."
-          className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30 resize-y" rows={8} />
-        <p className="text-sm text-taupe/60 mt-2">Ce texte est utilisé pour personnaliser les lettres de motivation.</p>
-      </Section>
+      {/* Formation */}
+      <Carte titre="Formation" icone={<GraduationCap className="w-5 h-5" />}>
+        <Champ valeur={profile.formation} onChange={(v) => updateProfile({ formation: v })} placeholder="Formation (ex. Licence Pro Dev Web)" rows={2} />
+      </Carte>
 
       {/* Documents */}
-      <Section titre="Documents importés" icone={<Upload className="w-5 h-5" />}>
-        <button onClick={handleImporter} className="bg-ambre text-white rounded-xl px-5 py-2.5 flex items-center gap-2 hover:opacity-90 transition-all font-medium text-base mb-4">
-          <Upload className="w-4 h-4" /> Importer un CV</button>
-        {importMessage && <p className={`text-sm mb-3 ${importMessage.startsWith('✓') ? 'text-vert-success' : 'text-rouge-error'}`}>{importMessage}</p>}
-        {documents.length === 0 ? <p className="text-sm text-taupe/60">Aucun document importé.</p> : (
-          <ul className="space-y-2">
-            {documents.map((doc) => (
-              <li key={doc.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-creme border border-bordure">
-                <div className="flex items-center gap-2 min-w-0">
-                  <File className="w-4 h-4 text-taupe flex-shrink-0" />
-                  <span className="text-base text-cacao truncate">{doc.nom}</span>
-                </div>
-                <button onClick={() => removeDocument(doc.id)} className="text-taupe hover:text-rouge-error transition-colors flex-shrink-0 ml-2">
-                  <X className="w-4 h-4" /></button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      <Carte titre="Documents" icone={<File className="w-5 h-5" />}>
+        <div className="space-y-2 mb-3">
+          {documents.map((d) => (
+            <div key={d.id} className="flex items-center justify-between p-3 rounded-xl bg-creme border border-bordure">
+              <span className="text-base text-cacao truncate">{d.nom}</span>
+              <button onClick={() => removeDocument(d.id)} className="text-taupe hover:text-rouge-error transition-colors"><X className="w-4 h-4" /></button>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="cursor-pointer bg-action text-white rounded-xl px-5 py-3 text-sm hover:opacity-90 transition-all font-medium flex items-center gap-1.5">
+            <Upload className="w-4 h-4" /> Importer un CV
+            <input type="file" accept=".pdf,.docx,.txt" onChange={handleImportDoc} className="hidden" />
+          </label>
+          {importMessage && <span className="text-sm text-vert-success">{importMessage}</span>}
+        </div>
+      </Carte>
 
-      <div className="flex justify-end pt-2">
-        <button className="bg-ambre text-white rounded-xl px-8 py-3 text-base font-medium hover:opacity-90 transition-all shadow-sm flex items-center gap-2">
-          <Save className="w-5 h-5" /> Enregistrer</button>
+      {/* Sauvegarder */}
+      <div className="flex justify-end">
+        <button onClick={() => {
+          const s = useStore.getState()
+          s.saveToDisk()
+        }} className="bg-action text-white rounded-xl px-6 py-3 text-base hover:opacity-90 transition-all font-medium flex items-center gap-2">
+          <Save className="w-5 h-5" /> Sauvegarder
+        </button>
       </div>
     </div>
   )

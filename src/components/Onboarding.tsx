@@ -67,14 +67,14 @@ export default function Onboarding() {
             {e.icone}
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-ambre-900">{e.titre}</h2>
-            <p className="text-sm text-ambre-500">Étape {etape + 1} sur {ETAPES.length}</p>
+            <h2 className="text-xl font-semibold text-cacao">{e.titre}</h2>
+            <p className="text-sm text-taupe/60">Étape {etape + 1} sur {ETAPES.length}</p>
           </div>
         </div>
 
         {/* Body */}
         <div className="px-6 py-4">
-          <p className="text-ambre-700 leading-relaxed whitespace-pre-line">{e.texte}</p>
+          <p className="text-taupe leading-relaxed whitespace-pre-line">{e.texte}</p>
         </div>
 
         {/* Progress dots */}
@@ -91,10 +91,10 @@ export default function Onboarding() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between items-center px-6 py-4 bg-creme border-t border-ambre-100">
+        <div className="flex justify-between items-center px-6 py-4 bg-creme border-t border-bordure/50">
           <button
             onClick={() => setOnboardingDone(true)}
-            className="text-sm text-ambre-400 hover:text-ambre-600 transition-colors"
+            className="text-sm text-taupe/40 hover:text-taupe transition-colors"
           >
             Passer
           </button>
@@ -103,7 +103,7 @@ export default function Onboarding() {
             {etape > 0 && (
               <button
                 onClick={() => setEtape(etape - 1)}
-                className="px-4 py-2 text-sm rounded-lg border border-ambre-200 text-ambre-600 hover:bg-ambre-50 transition-colors"
+                className="px-4 py-2 text-sm rounded-lg border border-bordure text-taupe hover:bg-ambre/5 transition-colors"
               >
                 Retour
               </button>

@@ -15,7 +15,7 @@ function Carte({ titre, icone, children }: { titre: string; icone?: React.ReactN
   return (
     <section className="rounded-2xl bg-white border border-bordure shadow-sm p-6">
       <div className="flex items-center gap-2 mb-4">
-        {icone && <span className="text-ambre">{icone}</span>}
+        {icone && <span className="text-action">{icone}</span>}
         <h2 className="text-lg font-semibold text-cacao">{titre}</h2>
       </div>
       {children}
@@ -43,7 +43,7 @@ export default function OngletAccueil() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
-        <Sparkles className="w-7 h-7 text-ambre" />
+        <Sparkles className="w-7 h-7 text-action" />
         <h1 className="text-2xl font-bold text-cacao">Tableau de bord</h1>
       </div>
 
@@ -65,7 +65,7 @@ export default function OngletAccueil() {
           <div className="text-center py-8">
             <MessageCircle className="w-10 h-10 text-sable mx-auto mb-3" />
             <p className="text-base text-taupe">Pas encore de réponses.</p>
-            <p className="text-sm text-taupe/60 mt-1">Configure ton email dans <button onClick={() => setCurrentTab('reglages')} className="text-ambre underline">Réglages</button>.</p>
+            <p className="text-sm text-taupe/60 mt-1">Configure ton email dans <button onClick={() => setCurrentTab('reglages')} className="text-action underline">Réglages</button>.</p>
           </div>
         )}
       </Carte>
@@ -82,7 +82,7 @@ export default function OngletAccueil() {
                   <p className="text-sm text-taupe">{o.entreprise} · {joursDepuis(o.dateAjout)}</p>
                 </div>
                 {!o.lettre && (
-                  <button onClick={() => setCurrentTab('postuler')} className="text-sm text-ambre font-medium hover:underline">
+                  <button onClick={() => setCurrentTab('postuler')} className="text-sm text-action font-medium hover:underline">
                     Postuler
                   </button>
                 )}
@@ -126,7 +126,7 @@ export default function OngletAccueil() {
       <div className="grid grid-cols-2 gap-4">
         <button
           onClick={() => setCurrentTab('offres')}
-          className="flex items-center justify-center gap-3 bg-ambre text-white rounded-2xl px-6 py-5 text-lg font-medium hover:opacity-90 transition-all shadow-sm"
+          className="flex items-center justify-center gap-3 bg-action text-white rounded-2xl px-6 py-5 text-lg font-medium hover:opacity-90 transition-all shadow-sm"
         >
           <PlusCircle className="w-6 h-6" />
           Ajouter une offre

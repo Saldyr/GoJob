@@ -4,7 +4,10 @@ import { genererLettreMotivation } from '../utils/api'
 import { FileText, Copy, Sparkles, RefreshCw, Send, ArrowRight } from 'lucide-react'
 
 export default function OngletCandidater() {
-  const { offres, profile, settings, updateOffre } = useStore()
+  const offres = useStore((s) => s.offres)
+  const profile = useStore((s) => s.profile)
+  const settings = useStore((s) => s.settings)
+  const updateOffre = useStore((s) => s.updateOffre)
   const [offreId, setOffreId] = useState('')
   const [lettreLocale, setLettreLocale] = useState('')
   const [loading, setLoading] = useState(false)
@@ -14,9 +17,10 @@ export default function OngletCandidater() {
   const offreCourante = offres.find((o) => o.id === offreId)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (offreCourante?.lettre) setLettreLocale(offreCourante.lettre)
     else setLettreLocale('')
-  }, [offreId])
+  }, [offreId, offreCourante?.lettre])
 
   const offresAPostuler = offres.filter((o) => o.statut === 'a_postuler')
 
@@ -65,7 +69,7 @@ export default function OngletCandidater() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
-        <Send className="w-7 h-7 text-ambre" />
+        <Send className="w-7 h-7 text-action" />
         <h1 className="text-2xl font-bold text-cacao">Postuler</h1>
       </div>
 
@@ -91,7 +95,7 @@ export default function OngletCandidater() {
             {offreCourante.source && <span>Source : {offreCourante.source}</span>}
             {offreCourante.ville && <span>· {offreCourante.ville}</span>}
             {offreCourante.url && (
-              <a href={offreCourante.url} target="_blank" rel="noreferrer" className="text-ambre hover:underline flex items-center gap-1 ml-auto">
+              <a href={offreCourante.url} target="_blank" rel="noreferrer" className="text-action hover:underline flex items-center gap-1 ml-auto">
                 Voir l'annonce <ArrowRight className="w-3.5 h-3.5" />
               </a>
             )}
@@ -101,7 +105,7 @@ export default function OngletCandidater() {
         <button
           onClick={handleGenerer}
           disabled={!offreId || loading}
-          className="mt-4 w-full bg-ambre text-white rounded-xl px-6 py-3 text-base font-medium flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-40 transition-all"
+          className="mt-4 w-full bg-action text-white rounded-xl px-6 py-3 text-base font-medium flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-40 transition-all"
         >
           {loading ? (
             <><RefreshCw className="w-5 h-5 animate-spin" /> Génération...</>
@@ -137,10 +141,10 @@ export default function OngletCandidater() {
           <h2 className="text-xl font-semibold text-cacao mb-2">Sélectionne une offre</h2>
           <p className="text-base text-taupe">La lettre sera générée automatiquement.</p>
           {!profile.cvText && (
-            <p className="text-sm text-ambre mt-3">Remplis d'abord ton profil (onglet Mon profil) pour une lettre personnalisée.</p>
+            <p className="text-sm text-action mt-3">Remplis d'abord ton profil (onglet Mon profil) pour une lettre personnalisée.</p>
           )}
           {!settings.cleApi && (
-            <p className="text-sm text-ambre mt-2">Configure ta clé API dans l'onglet Réglages pour générer des lettres.</p>
+            <p className="text-sm text-action mt-2">Configure ta clé API dans l'onglet Réglages pour générer des lettres.</p>
           )}
         </div>
       )}
