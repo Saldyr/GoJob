@@ -363,8 +363,8 @@ ipcMain.handle('france-travail-offres', async (_event, { motsCles, localisation 
 //   Non-TLS (port 143) : net.Socket + STARTTLS + LOGIN (LOGIN jamais en clair).
 // Pour Gmail/Outlook : utiliser TLS 993 (recommandé et standard).
 
-// RFC 3501 quoted-string : backslash et guillemet échappés
 function escapeIMAP(str) {
+  // RFC 3501 quoted-string : backslash et guillemet échappés
   return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
