@@ -5,7 +5,7 @@ import { FileText, Send, Settings, ArrowRight, Check, Sparkles } from 'lucide-re
 const ETAPES = [
   {
     titre: 'Bienvenue sur GoJob',
-    icone: <Sparkles className="w-12 h-12" style={{ color: '#b86b4c' }} />,
+    icone: <Sparkles className="w-12 h-12 text-action" />,
     texte: `GoJob t'aide à gérer ta recherche d'emploi :
 • Importe ton CV et suis tes candidatures
 • Rédige des lettres de motivation personnalisées avec l'IA
@@ -15,7 +15,7 @@ Commençons par les bases.`,
   },
   {
     titre: 'Étape 1 — Ton profil',
-    icone: <FileText className="w-12 h-12" style={{ color: '#b86b4c' }} />,
+    icone: <FileText className="w-12 h-12 text-action" />,
     texte: `Renseigne ton profil dans l'onglet Profil :
 • Ton nom, titre et compétences
 • Importe ton CV (PDF ou copie-colle)
@@ -25,18 +25,18 @@ Ces infos servent à générer des lettres adaptées.`,
   },
   {
     titre: 'Étape 2 — Ta clé API',
-    icone: <Settings className="w-12 h-12" style={{ color: '#b86b4c' }} />,
+    icone: <Settings className="w-12 h-12 text-action" />,
     texte: `Dans l'onglet Réglages :
 1. Colle ta clé API DeepSeek (ou Groq, OpenAI)
 2. Clique sur « Tester la clé »
 3. Configure IMAP si tu veux recevoir les réponses par email
 4. Configure France Travail pour importer les offres
 
-La clé est stockée chiffrée (safeStorage).`,
+Ta clé est chiffrée sur ton ordinateur.`,
   },
   {
     titre: 'Prêt·e à postuler ?',
-    icone: <Send className="w-12 h-12" style={{ color: '#b86b4c' }} />,
+    icone: <Send className="w-12 h-12 text-action" />,
     texte: `Le tableau de bord est prêt :
 
 • **Offres** : ajoute des offres manuellement
@@ -57,13 +57,11 @@ export default function Onboarding() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
-        style={{ borderTop: '4px solid #b86b4c' }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border-t-4 border-action"
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-6 pt-6 pb-2">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center"
-               style={{ backgroundColor: '#faf3eb' }}>
+          <div className="w-16 h-16 rounded-full flex items-center justify-center bg-action/10">
             {e.icone}
           </div>
           <div>
@@ -82,10 +80,9 @@ export default function Onboarding() {
           {ETAPES.map((_, i) => (
             <div
               key={i}
-              className="w-2 h-2 rounded-full transition-colors"
-              style={{
-                backgroundColor: i === etape ? '#b86b4c' : i < etape ? '#dca08a' : '#e6d9cf',
-              }}
+              className={`w-2 h-2 rounded-full transition-colors ${
+                i === etape ? 'bg-action' : i < etape ? 'bg-action/50' : 'bg-bordure'
+              }`}
             />
           ))}
         </div>
@@ -112,10 +109,7 @@ export default function Onboarding() {
             {isLast ? (
               <button
                 onClick={() => setOnboardingDone(true)}
-                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg transition-colors"
-                style={{ backgroundColor: '#b86b4c' }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#a35d42'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#b86b4c'}
+                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg bg-action hover:opacity-90 transition-all"
               >
                 <Check className="w-4 h-4" />
                 Commencer
@@ -123,10 +117,7 @@ export default function Onboarding() {
             ) : (
               <button
                 onClick={() => setEtape(etape + 1)}
-                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg transition-colors"
-                style={{ backgroundColor: '#b86b4c' }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#a35d42'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#b86b4c'}
+                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg bg-action hover:opacity-90 transition-all"
               >
                 Suivant
                 <ArrowRight className="w-4 h-4" />

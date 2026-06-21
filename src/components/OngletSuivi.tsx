@@ -6,6 +6,7 @@ import { joursDepuis } from '../utils/offres'
 export default function OngletSuivi() {
   const offres = useStore((s) => s.offres)
   const updateOffre = useStore((s) => s.updateOffre)
+  const setCurrentTab = useStore((s) => s.setCurrentTab)
 
   const offresActives = offres.filter((o) => o.statut !== 'a_postuler' && o.statut !== 'refus' && o.statut !== 'acceptee')
   const refus = offres.filter((o) => o.statut === 'refus').length
@@ -37,6 +38,9 @@ export default function OngletSuivi() {
           <Calendar className="w-14 h-14 text-sable mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-cacao mb-2">Aucune candidature</h2>
           <p className="text-base text-taupe">Postule à une offre depuis l'onglet Postuler.</p>
+          <button onClick={() => setCurrentTab('postuler')} className="mt-3 bg-action text-white rounded-xl px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-all">
+            Aller postuler
+          </button>
         </div>
       </div>
     )

@@ -78,7 +78,7 @@ export default function OngletOffres() {
         <h3 className="text-lg font-semibold text-cacao mb-4">Nouvelle offre</h3>
         <div className="space-y-4">
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Colle l'URL de l'offre (détection automatique)"
-            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30" />
+            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
           <button onClick={ajouterDepuisUrl}
             className="bg-sable text-cacao rounded-xl px-5 py-2.5 text-base font-medium hover:opacity-90 transition-all">Détecter depuis l'URL</button>
 
@@ -86,13 +86,13 @@ export default function OngletOffres() {
 
           <div className="grid grid-cols-2 gap-3">
             <input value={manuel.titre} onChange={(e) => setManuel({ ...manuel, titre: e.target.value })}
-              placeholder="Titre du poste" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30" />
+              placeholder="Titre du poste" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
             <input value={manuel.entreprise} onChange={(e) => setManuel({ ...manuel, entreprise: e.target.value })}
-              placeholder="Entreprise" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30" />
+              placeholder="Entreprise" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
             <input value={manuel.source} onChange={(e) => setManuel({ ...manuel, source: e.target.value })}
-              placeholder="Source (Indeed, LinkedIn...)" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30" />
+              placeholder="Source (Indeed, LinkedIn...)" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
             <input value={manuel.ville} onChange={(e) => setManuel({ ...manuel, ville: e.target.value })}
-              placeholder="Ville" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-ambre/30" />
+              placeholder="Ville" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
           </div>
           <button onClick={ajouterManuellement} disabled={!manuel.titre.trim() || !manuel.entreprise.trim()}
             className="w-full bg-action text-white rounded-xl px-5 py-3 text-base font-medium hover:opacity-90 disabled:opacity-40 transition-all">Ajouter l'offre</button>

@@ -19,6 +19,14 @@ export default function OngletProfil() {
   const addDocument = useStore((s) => s.addDocument)
   const removeDocument = useStore((s) => s.removeDocument)
   const [importMessage, setImportMessage] = useState('')
+  const [savedIndicator, setSavedIndicator] = useState(false)
+
+  // Auto-save feedback
+  const triggerSave = () => {
+    useStore.getState().saveToDisk()
+    setSavedIndicator(true)
+    setTimeout(() => setSavedIndicator(false), 2000)
+  }
 
   const [nouvelleCompetence, setNouvelleCompetence] = useState('')
   const [ajoutLangue, setAjoutLangue] = useState('')
@@ -82,10 +90,10 @@ export default function OngletProfil() {
       {/* Infos personnelles */}
       <Carte titre="Infos personnelles" icone={<User className="w-5 h-5" />}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Champ valeur={profile.prenom} onChange={(v) => updateProfile({ prenom: v })} placeholder="Prénom" />
-          <Champ valeur={profile.nom} onChange={(v) => updateProfile({ nom: v })} placeholder="Nom" />
-          <Champ valeur={profile.email} onChange={(v) => updateProfile({ email: v })} placeholder="Email" type="email" />
-          <Champ valeur={profile.telephone} onChange={(v) => updateProfile({ telephone: v })} placeholder="Téléphone" type="tel" />
+          <Champ valeur={profile.prenom} onChange={(v) => updateProfile({ prenom: v })} placeholder="Prénom" label="Prénom" />
+          <Champ valeur={profile.nom} onChange={(v) => updateProfile({ nom: v })} placeholder="Nom" label="Nom" />
+          <Champ valeur={profile.email} onChange={(v) => updateProfile({ email: v })} placeholder="Email" type="email" label="Email" />
+          <Champ valeur={profile.telephone} onChange={(v) => updateProfile({ telephone: v })} placeholder="Téléphone" type="tel" label="Téléphone" />
         </div>
         <Champ valeur={profile.adresse} onChange={(v) => updateProfile({ adresse: v })} placeholder="Adresse" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
@@ -135,7 +143,7 @@ export default function OngletProfil() {
         <div className="flex gap-2 items-start">
           <Champ valeur={ajoutLangue} onChange={setAjoutLangue} placeholder="Langue" />
           <select value={ajoutNiveau} onChange={(e) => setAjoutNiveau(e.target.value)}
-            className="px-3 py-3 rounded-xl border border-bordure bg-white text-cacao text-base focus:outline-none focus:ring-2 focus:ring-action/30">
+            className="px-3 py-3 rounded-xl border border-bordure bg-white text-cacao text-base focus:outline-none focus:ring-2 focus:ring-action/50">
             <option>Débutant</option><option>Intermédiaire</option><option>Avancé</option><option>Natif</option>
           </select>
           <button onClick={ajouterLangue} className="bg-action text-white rounded-xl px-4 text-sm hover:opacity-90 transition-all font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Ajouter</button>
@@ -167,11 +175,11 @@ export default function OngletProfil() {
       </Carte>
 
       {/* Sauvegarder */}
-      <div className="flex justify-end">
-        <button onClick={() => {
-          const s = useStore.getState()
-          s.saveToDisk()
-        }} className="bg-action text-white rounded-xl px-6 py-3 text-base hover:opacity-90 transition-all font-medium flex items-center gap-2">
+      <div className="flex justify-end items-center gap-3">
+        <span className={`text-sm text-vert-success flex items-center gap-1 transition-opacity duration-200 ${savedIndicator ? 'opacity-100' : 'opacity-0'}`}>
+          ✓ Enregistré
+        </span>
+        <button onClick={triggerSave} className="bg-action text-white rounded-xl px-6 py-3 text-base hover:opacity-90 transition-all font-medium flex items-center gap-2">
           <Save className="w-5 h-5" /> Sauvegarder
         </button>
       </div>

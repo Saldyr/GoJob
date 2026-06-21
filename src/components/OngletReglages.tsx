@@ -5,10 +5,10 @@ import { Carte, Champ } from './ui'
 
 export default function OngletReglages() {
   const PRESETS = [
-    { nom: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', modele: 'deepseek-chat', icone: '🟡', gratuit: true },
-    { nom: 'Groq', endpoint: 'https://api.groq.com/openai/v1', modele: 'llama-3.3-70b-versatile', icone: '🟢', gratuit: true },
-    { nom: 'OpenAI', endpoint: 'https://api.openai.com/v1', modele: 'gpt-4o-mini', icone: '🔵', gratuit: false },
-    { nom: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', modele: 'gemini-2.5-flash', icone: '✨', gratuit: true },
+    { nom: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', modele: 'deepseek-chat', icone: '🟡', gratuit: true, urlCle: 'https://platform.deepseek.com/api_keys', recommande: true },
+    { nom: 'Groq', endpoint: 'https://api.groq.com/openai/v1', modele: 'llama-3.3-70b-versatile', icone: '🟢', gratuit: true, urlCle: 'https://console.groq.com/keys' },
+    { nom: 'OpenAI', endpoint: 'https://api.openai.com/v1', modele: 'gpt-4o-mini', icone: '🔵', gratuit: false, urlCle: 'https://platform.openai.com/api-keys' },
+    { nom: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', modele: 'gemini-2.5-flash', icone: '✨', gratuit: true, urlCle: 'https://aistudio.google.com/apikey' },
   ]
 
   const settings = useStore((s) => s.settings)
@@ -19,6 +19,8 @@ export default function OngletReglages() {
   const [imapResult, setImapResult] = useState('')
   const [ftResult, setFtResult] = useState('')
   const [secretsLoaded, setSecretsLoaded] = useState(false)
+
+  const presetActif = PRESETS.find(p => p.endpoint === settings.endpoint)
 
   // Charger les secrets depuis safeStorage
   useEffect(() => {
@@ -105,7 +107,7 @@ export default function OngletReglages() {
       </div>
 
       {/* LLM */}
-      <Carte titre="Générateur de lettres (LLM)" icone={<Sparkles className="w-5 h-5" />}>
+      <Carte titre="Générateur de lettres" icone={<Sparkles className="w-5 h-5" />}>
         {!settings.cleApi && (
           <div className="bg-ambre/5 border border-ambre/30 rounded-xl p-4 text-sm text-cacao flex items-start gap-3 mb-4">
             <Sparkles className="w-5 h-5 text-action flex-shrink-0 mt-0.5" />
@@ -132,6 +134,7 @@ export default function OngletReglages() {
               <span className="text-lg">{p.icone}</span>
               <span className="block mt-1">{p.nom}</span>
               {p.gratuit && <span className="text-xs text-vert-success">gratuit</span>}
+              {p.recommande && <span className="text-xs bg-action text-white px-2 py-0.5 rounded-full ml-2">Recommandé</span>}
             </button>
           ))}
         </div>
@@ -141,12 +144,18 @@ export default function OngletReglages() {
           <input type={showKey ? 'text' : 'password'} value={settings.cleApi}
             onChange={(e) => updateSettings({ cleApi: e.target.value })}
             placeholder="sk-..."
-            className="w-full px-4 py-3 pr-12 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
+            className="w-full px-4 py-3 pr-12 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50"
           />
           <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-taupe hover:text-cacao transition-colors">
             {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
           </button>
         </div>
+
+        {presetActif?.urlCle && (
+          <a href={presetActif.urlCle} target="_blank" rel="noreferrer" className="text-sm text-action underline mb-3 inline-block">
+            Obtenir une clé {presetActif.nom} gratuitement →
+          </a>
+        )}
 
         <div className="flex items-center gap-3 mb-3">
           <button onClick={testerCle} disabled={testResult === 'testing'}
@@ -159,7 +168,7 @@ export default function OngletReglages() {
           {testMessage && <span className={`text-sm ${testResult === 'ok' ? 'text-vert-success' : 'text-rouge-error'}`}>{testMessage}</span>}
         </div>
 
-        <p className="text-sm text-taupe/60">La clé est chiffrée via safeStorage d'Electron et n'est jamais écrite en clair.</p>
+        <p className="text-sm text-taupe/60">Ta clé est chiffrée sur ton ordinateur, jamais partagée.</p>
       </Carte>
 
       {/* France Travail */}
@@ -169,7 +178,7 @@ export default function OngletReglages() {
           <Champ valeur={settings.franceTravailClientId || ''} onChange={(v) => updateSettings({ franceTravailClientId: v })} placeholder="Client ID France Travail" />
           <input type="password" value={settings.franceTravailClientSecret || ''} onChange={(e) => updateSettings({ franceTravailClientSecret: e.target.value })}
             placeholder="Client Secret France Travail"
-            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
+            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50"
           />
           <div className="flex items-center gap-3">
             <button onClick={testerFranceTravail} className="bg-sable text-cacao rounded-xl px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-all">Connecter France Travail</button>
@@ -185,19 +194,19 @@ export default function OngletReglages() {
           <Champ valeur={settings.imapHost || ''} onChange={(v) => updateSettings({ imapHost: v })} placeholder="Serveur IMAP (ex: imap.gmail.com)" />
           <input type="number" value={settings.imapPort || ''} onChange={(e) => updateSettings({ imapPort: parseInt(e.target.value) || 143 })}
             placeholder="Port (143 ou 993)"
-            className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
+            className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50"
           />
         </div>
         <div className="space-y-3 mb-3">
           <Champ valeur={settings.imapUser || ''} onChange={(v) => updateSettings({ imapUser: v })} placeholder="Adresse email" />
           <input type="password" value={settings.imapPassword || ''} onChange={(e) => updateSettings({ imapPassword: e.target.value })}
             placeholder="Mot de passe ou mot de passe d'application"
-            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/40 focus:outline-none focus:ring-2 focus:ring-action/30"
+            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50"
           />
         </div>
         <label className="flex items-center gap-2 text-sm text-cacao mb-3 cursor-pointer">
           <input type="checkbox" checked={settings.imapTLS} onChange={(e) => updateSettings({ imapTLS: e.target.checked })}
-            className="w-4 h-4 rounded border-bordure text-action focus:ring-action/30"
+            className="w-4 h-4 rounded border-bordure accent-action focus:ring-action/50"
           />
           Utiliser TLS/SSL (port 993)
         </label>
@@ -212,10 +221,10 @@ export default function OngletReglages() {
       <div className="rounded-2xl bg-creme border border-bordure shadow-sm p-6">
         <p className="text-lg font-semibold text-cacao mb-3">🔒 Sécurité</p>
         <ul className="space-y-2 text-base text-taupe">
-          <li className="flex items-start gap-2"><Check className="w-4 h-4 text-vert-success mt-1 flex-shrink-0" /> Clé API, identifiants IMAP et France Travail sont chiffrés via Electron safeStorage</li>
+          <li className="flex items-start gap-2"><Check className="w-4 h-4 text-vert-success mt-1 flex-shrink-0" /> Clé API, identifiants IMAP et France Travail sont chiffrés sur ton ordinateur</li>
           <li className="flex items-start gap-2"><Check className="w-4 h-4 text-vert-success mt-1 flex-shrink-0" /> Aucun secret n'est stocké en localStorage clair</li>
           <li className="flex items-start gap-2"><Check className="w-4 h-4 text-vert-success mt-1 flex-shrink-0" /> L'export de données ne contient JAMAIS les secrets</li>
-          <li className="flex items-start gap-2"><Check className="w-4 h-4 text-vert-success mt-1 flex-shrink-0" /> Les lettres sont envoyées directement au LLM (pas de serveur intermédiaire)</li>
+          <li className="flex items-start gap-2"><Check className="w-4 h-4 text-vert-success mt-1 flex-shrink-0" /> Les lettres sont envoyées directement au service d'IA (pas de serveur intermédiaire)</li>
         </ul>
       </div>
     </div>

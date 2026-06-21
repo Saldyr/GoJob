@@ -8,6 +8,7 @@ export default function OngletCandidater() {
   const profile = useStore((s) => s.profile)
   const settings = useStore((s) => s.settings)
   const updateOffre = useStore((s) => s.updateOffre)
+  const setCurrentTab = useStore((s) => s.setCurrentTab)
   const [offreId, setOffreId] = useState('')
   const [lettreLocale, setLettreLocale] = useState('')
   const [loading, setLoading] = useState(false)
@@ -79,7 +80,7 @@ export default function OngletCandidater() {
         <select
           value={offreId}
           onChange={(e) => { setOffreId(e.target.value); setErreur('') }}
-          className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base focus:outline-none focus:ring-2 focus:ring-ambre/30"
+          className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base focus:outline-none focus:ring-2 focus:ring-action/50"
         >
           <option value="">Choisis une offre...</option>
           {offresAPostuler.map((o) => (
@@ -127,7 +128,7 @@ export default function OngletCandidater() {
           <textarea
             value={lettreLocale}
             onChange={handleLettreChange}
-            className="w-full p-5 rounded-xl border border-bordure bg-creme text-cacao text-base leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-ambre/30"
+            className="w-full p-5 rounded-xl border border-bordure bg-creme text-cacao text-base leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-action/50"
             rows={18}
           />
         </div>
@@ -141,10 +142,14 @@ export default function OngletCandidater() {
           <h2 className="text-xl font-semibold text-cacao mb-2">Sélectionne une offre</h2>
           <p className="text-base text-taupe">La lettre sera générée automatiquement.</p>
           {!profile.cvText && (
-            <p className="text-sm text-action mt-3">Remplis d'abord ton profil (onglet Mon profil) pour une lettre personnalisée.</p>
+            <button onClick={() => setCurrentTab('profil')} className="text-sm text-action underline font-medium cursor-pointer hover:opacity-80 transition-colors mt-3">
+              Remplis d'abord ton profil (onglet Mon profil) pour une lettre personnalisée.
+            </button>
           )}
           {!settings.cleApi && (
-            <p className="text-sm text-action mt-2">Configure ta clé API dans l'onglet Réglages pour générer des lettres.</p>
+            <button onClick={() => setCurrentTab('reglages')} className="text-sm text-action underline font-medium cursor-pointer hover:opacity-80 transition-colors mt-2">
+              Configure ta clé API dans l'onglet Réglages pour générer des lettres.
+            </button>
           )}
         </div>
       )}

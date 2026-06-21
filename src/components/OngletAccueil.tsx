@@ -1,5 +1,5 @@
 import { useStore } from '../store/useStore'
-import { MessageCircle, Calendar, Briefcase, BarChart3, PlusCircle, FileEdit, Sparkles } from 'lucide-react'
+import { MessageCircle, Calendar, Briefcase, BarChart3, PlusCircle, FileEdit, Sparkles, CheckCircle } from 'lucide-react'
 import { joursDepuis } from '../utils/offres'
 
 function Tuile({ valeur, label }: { valeur: number; label: string }) {
@@ -25,6 +25,8 @@ function Carte({ titre, icone, children }: { titre: string; icone?: React.ReactN
 
 export default function OngletAccueil() {
   const offres = useStore((s) => s.offres)
+  const profile = useStore((s) => s.profile)
+  const settings = useStore((s) => s.settings)
   const setCurrentTab = useStore((s) => s.setCurrentTab)
 
   const today = new Date()
@@ -47,7 +49,32 @@ export default function OngletAccueil() {
         <h1 className="text-2xl font-bold text-cacao">Tableau de bord</h1>
       </div>
 
-      {/* 1. Réponses / retours */}
+      {/* Checklist 3 étapes — nouveau utilisateur */}
+      {profile.nom === '' && offres.length === 0 && (
+        <section className="rounded-2xl bg-white border border-bordure shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-cacao mb-4">Pour commencer, 3 étapes</h2>
+          <div className="space-y-3">
+            <button onClick={() => setCurrentTab('profil')} className="flex items-center gap-4 w-full p-3 rounded-xl bg-creme cursor-pointer hover:bg-sable/20 transition-colors text-left">
+              <div className="w-7 h-7 rounded-full bg-action text-white flex items-center justify-center shrink-0 text-sm font-bold">1</div>
+              <span className="flex-1 text-base text-cacao font-medium">Compléter mon profil</span>
+              {profile.nom !== '' && <CheckCircle className="w-5 h-5 text-vert-success shrink-0" />}
+            </button>
+            <button onClick={() => setCurrentTab('reglages')} className="flex items-center gap-4 w-full p-3 rounded-xl bg-creme cursor-pointer hover:bg-sable/20 transition-colors text-left">
+              <div className="w-7 h-7 rounded-full bg-action text-white flex items-center justify-center shrink-0 text-sm font-bold">2</div>
+              <span className="flex-1 text-base text-cacao font-medium">Ajouter ma clé API</span>
+              {settings.cleApi !== '' && <CheckCircle className="w-5 h-5 text-vert-success shrink-0" />}
+            </button>
+            <button onClick={() => setCurrentTab('offres')} className="flex items-center gap-4 w-full p-3 rounded-xl bg-creme cursor-pointer hover:bg-sable/20 transition-colors text-left">
+              <div className="w-7 h-7 rounded-full bg-action text-white flex items-center justify-center shrink-0 text-sm font-bold">3</div>
+              <span className="flex-1 text-base text-cacao font-medium">Ajouter ma première offre</span>
+              {offres.length > 0 && <CheckCircle className="w-5 h-5 text-vert-success shrink-0" />}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Cartes — seulement si offres existent */}
+      {offres.length > 0 && (<>
       <Carte titre="Réponses reçues" icone={<MessageCircle className="w-5 h-5" />}>
         {avecLettre.length > 0 ? (
           <ul className="space-y-3">
@@ -139,6 +166,7 @@ export default function OngletAccueil() {
           Générer une lettre
         </button>
       </div>
+      </>)} {/* fin offres.length > 0 */}
     </div>
   )
 }
