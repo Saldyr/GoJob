@@ -14,7 +14,10 @@
     },
     "win": {
       "artifactName": "GoJob Setup ${version}.${ext}",
-      "target": ["portable", "nsis"],
+      "target": [
+        "portable",
+        "nsis"
+      ],
       "icon": "build/icon.ico"
     },
     "portable": {
@@ -45,6 +48,8 @@
     "electron:start": "electron ."
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "framer-motion": "^12.40.0",
     "lucide-react": "^1.21.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

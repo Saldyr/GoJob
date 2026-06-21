@@ -57,7 +57,7 @@ export default function Onboarding() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border-t-4 border-action"
+        className="bg-surface-2 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border-t-4 border-action"
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-6 pt-6 pb-2">
@@ -65,14 +65,14 @@ export default function Onboarding() {
             {e.icone}
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-cacao">{e.titre}</h2>
-            <p className="text-sm text-taupe/60">Étape {etape + 1} sur {ETAPES.length}</p>
+            <h2 className="text-xl font-semibold text-white">{e.titre}</h2>
+            <p className="text-sm text-text-dim">Étape {etape + 1} sur {ETAPES.length}</p>
           </div>
         </div>
 
         {/* Body */}
         <div className="px-6 py-4">
-          <p className="text-taupe leading-relaxed whitespace-pre-line">{e.texte}</p>
+          <p className="text-text leading-relaxed whitespace-pre-line">{e.texte}</p>
         </div>
 
         {/* Progress dots */}
@@ -88,10 +88,10 @@ export default function Onboarding() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between items-center px-6 py-4 bg-creme border-t border-bordure/50">
+        <div className="flex justify-between items-center px-6 py-4 bg-surface-3 border-t border-bordure/50">
           <button
             onClick={() => setOnboardingDone(true)}
-            className="text-sm text-taupe/40 hover:text-taupe transition-colors"
+            className="text-sm text-text-muted hover:text-text transition-colors"
           >
             Passer
           </button>
@@ -100,7 +100,7 @@ export default function Onboarding() {
             {etape > 0 && (
               <button
                 onClick={() => setEtape(etape - 1)}
-                className="px-4 py-2 text-sm rounded-lg border border-bordure text-taupe hover:bg-ambre/5 transition-colors"
+                className="px-4 py-2 text-sm rounded-lg border border-bordure text-text-dim hover:bg-action/10 transition-colors"
               >
                 Retour
               </button>
@@ -109,7 +109,7 @@ export default function Onboarding() {
             {isLast ? (
               <button
                 onClick={() => setOnboardingDone(true)}
-                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg bg-action hover:opacity-90 transition-all"
+                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg bg-action-deep hover:opacity-90 transition-all"
               >
                 <Check className="w-4 h-4" />
                 Commencer
@@ -117,7 +117,7 @@ export default function Onboarding() {
             ) : (
               <button
                 onClick={() => setEtape(etape + 1)}
-                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg bg-action hover:opacity-90 transition-all"
+                className="flex items-center gap-2 px-5 py-2 text-sm text-white rounded-lg bg-action-deep hover:opacity-90 transition-all"
               >
                 Suivant
                 <ArrowRight className="w-4 h-4" />

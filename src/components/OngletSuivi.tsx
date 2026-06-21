@@ -1,135 +1,104 @@
-import { Calendar, MessageSquare, CheckCircle, Briefcase, XCircle } from 'lucide-react'
-import { Carte, StatutBadge } from './ui'
-import { useStore, type Offre } from '../store/useStore'
-import { joursDepuis } from '../utils/offres'
+import { useStore } from '../store/useStore'
+import { ClipboardList, Briefcase, TrendingUp, Calendar, Send, CheckCircle, Clock } from 'lucide-react'
+import { Carte } from './ui/Carte'
+import { Bouton } from './ui/Bouton'
+import { StatutBadge } from './ui/StatutBadge'
 
 export default function OngletSuivi() {
   const offres = useStore((s) => s.offres)
-  const updateOffre = useStore((s) => s.updateOffre)
   const setCurrentTab = useStore((s) => s.setCurrentTab)
 
-  const offresActives = offres.filter((o) => o.statut !== 'a_postuler' && o.statut !== 'refus' && o.statut !== 'acceptee')
-  const refus = offres.filter((o) => o.statut === 'refus').length
-  const acceptees = offres.filter((o) => o.statut === 'acceptee').length
-  const aRelancer = offres.filter((o) => {
-    if (o.statut !== 'postulee' && o.statut !== 'relancee') return false
-    if (!o.datePostulation) return false
-    return joursDepuis(o.datePostulation) >= 7
-  })
+  const postulees = offres.filter((o) => o.statut === 'postulee' || o.statut === 'relancee' || o.statut === 'entretien')
+  const entretiens = offres.filter((o) => o.statut === 'entretien')
+  const refus = offres.filter((o) => o.statut === 'refus')
+  const acceptees = offres.filter((o) => o.statut === 'acceptee')
 
-  const besoinRelance = (o: Offre): boolean => {
-    if (o.statut !== 'postulee' && o.statut !== 'relancee') return false
-    if (!o.datePostulation) return false
-    return joursDepuis(o.datePostulation) >= 7
-  }
-
-  const marquerRelance = (id: string) => {
-    updateOffre(id, { statut: 'relancee', dateRelance: new Date().toISOString() })
-  }
-
-  if (offresActives.length === 0 && refus === 0 && acceptees === 0) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Calendar className="w-7 h-7 text-action" />
-          <h1 className="text-2xl font-bold text-cacao">Suivi</h1>
-        </div>
-        <div className="rounded-2xl bg-white border border-bordure shadow-sm p-12 text-center">
-          <Calendar className="w-14 h-14 text-sable mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-cacao mb-2">Aucune candidature</h2>
-          <p className="text-base text-taupe">Postule à une offre depuis l'onglet Postuler.</p>
-          <button onClick={() => setCurrentTab('postuler')} className="mt-3 bg-action text-white rounded-xl px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-all">
-            Aller postuler
-          </button>
-        </div>
-      </div>
-    )
-  }
+  const stats = [
+    { label: 'Candidatures actives', valeur: postulees.length, icone: Send, couleur: 'text-electric' },
+    { label: 'Entretiens', valeur: entretiens.length, icone: Calendar, couleur: 'text-vert' },
+    { label: 'Refus', valeur: refus.length, icone: TrendingUp, couleur: 'text-rouge-error' },
+    { label: 'Acceptations', valeur: acceptees.length, icone: CheckCircle, couleur: 'text-vert' },
+  ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-2">
-        <Calendar className="w-7 h-7 text-action" />
-        <h1 className="text-2xl font-bold text-cacao">Suivi des candidatures</h1>
+    <div className="space-y-6 animate-fadeIn">
+      {/* En-tête */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-action to-action-vif flex items-center justify-center shadow-lg shadow-action-glow">
+          <ClipboardList className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h1>Suivi des candidatures</h1>
+          <p className="text-text-dim text-sm">{postulees.length} candidature{postulees.length > 1 ? 's' : ''} active{postulees.length > 1 ? 's' : ''}</p>
+        </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl bg-white border border-bordure shadow-sm p-5 text-center">
-          <p className="text-3xl font-bold text-cacao">{offresActives.length}</p>
-          <p className="text-sm text-taupe mt-1">En cours</p>
-        </div>
-        <div className="rounded-2xl bg-white border border-bordure shadow-sm p-5 text-center">
-          <p className="text-3xl font-bold text-action">{aRelancer.length}</p>
-          <p className="text-sm text-taupe mt-1">À relancer</p>
-        </div>
-        <div className="rounded-2xl bg-white border border-bordure shadow-sm p-5 text-center">
-          <p className="text-3xl font-bold text-vert-success">{acceptees}</p>
-          <p className="text-sm text-taupe mt-1">Acceptées</p>
-        </div>
-        <div className="rounded-2xl bg-white border border-bordure shadow-sm p-5 text-center">
-          <p className="text-3xl font-bold text-rouge-error">{refus}</p>
-          <p className="text-sm text-taupe mt-1">Refus</p>
-        </div>
+        {stats.map(({ label, valeur, icone: Icon, couleur }) => (
+          <div key={label} className="rounded-2xl border border-bordure bg-surface-2 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <Icon className={`w-5 h-5 ${couleur}`} />
+              <span className="text-2xl font-bold text-white">{valeur}</span>
+            </div>
+            <p className="text-xs text-text-dim">{label}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Actives */}
-      {offresActives.length > 0 && (
-        <Carte titre="Candidatures en cours" icone={<Briefcase className="w-5 h-5" />}>
-          <div className="space-y-3">
-            {offresActives.map((o) => (
-              <div key={o.id} className={`p-4 rounded-xl border ${besoinRelance(o) ? 'bg-ambre/5 border-ambre/30' : 'bg-creme border-bordure'}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-cacao">{o.titre}</h3>
-                    <p className="text-base text-taupe">{o.entreprise}</p>
-                  </div>
-                  <StatutBadge statut={o.statut} />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-taupe">
-                  <span>Postulée le {o.datePostulation ? new Date(o.datePostulation).toLocaleDateString() : '-'}</span>
-                  {o.dateRelance && <span>· Relancée le {new Date(o.dateRelance).toLocaleDateString()}</span>}
-                </div>
-
-                {besoinRelance(o) && (
-                  <button
-                    onClick={() => marquerRelance(o.id)}
-                    className="mt-3 bg-action text-white rounded-xl px-4 py-2 text-sm flex items-center gap-1.5 hover:opacity-90 transition-all font-medium"
-                  >
-                    <MessageSquare className="w-4 h-4" /> Marquer comme relancée
-                  </button>
-                )}
-
-                {o.url && (
-                  <a href={o.url} target="_blank" rel="noreferrer" className="text-sm text-action hover:underline mt-2 inline-block">
-                    Voir l'offre →
-                  </a>
-                )}
-              </div>
-            ))}
+      {/* Liste des candidatures */}
+      {postulees.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="w-16 h-16 rounded-2xl bg-surface-3 flex items-center justify-center mx-auto mb-4">
+            <ClipboardList className="w-8 h-8 text-text-muted" />
           </div>
-        </Carte>
+          <p className="text-text-dim text-lg font-medium mb-1">Aucune candidature active</p>
+          <p className="text-text-muted text-sm mb-6">Postulez à des offres pour les voir apparaître ici</p>
+          <Bouton variant="primaire" onClick={() => setCurrentTab('offres')}><Briefcase className="w-4 h-4" /> Voir les offres</Bouton>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {postulees.map((offre) => (
+            <div key={offre.id} className="rounded-2xl border border-bordure bg-surface-2 p-5 shadow-sm card-hover">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-white font-semibold">{offre.titre}</h3>
+                    <StatutBadge statut={offre.statut} />
+                  </div>
+                  <p className="text-text-dim text-sm">{offre.entreprise}</p>
+                  <div className="flex flex-wrap gap-3 mt-2 text-xs text-text-muted">
+                    {offre.datePostulation && (
+                      <span className="flex items-center gap-1">
+                        <Send className="w-3.5 h-3.5" /> Postulée le {new Date(offre.datePostulation).toLocaleDateString('fr-FR')}
+                      </span>
+                    )}
+                    {offre.dateRelance && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" /> Relancée le {new Date(offre.dateRelance).toLocaleDateString('fr-FR')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Terminées */}
-      {(refus > 0 || acceptees > 0) && (
-        <Carte titre="Terminées" icone={<CheckCircle className="w-5 h-5" />}>
-          <div className="space-y-2">
-            {offres.filter((o) => o.statut === 'refus' || o.statut === 'acceptee').map((o) => (
-              <div key={o.id} className="flex items-center justify-between p-3 rounded-xl bg-creme border border-bordure">
-                <div className="flex items-center gap-2">
-                  {o.statut === 'acceptee' ? (
-                    <CheckCircle className="w-4 h-4 text-vert-success" />
-                  ) : (
-                    <XCircle className="w-4 h-4 text-rouge-error" />
-                  )}
-                  <div>
-                    <span className="text-base font-medium text-cacao">{o.titre}</span>
-                    <span className="text-sm text-taupe ml-2">— {o.entreprise}</span>
-                  </div>
+      {/* Entretiens à venir */}
+      {entretiens.length > 0 && (
+        <Carte titre="Entretiens à venir" icone={<Calendar className="w-5 h-5" />}>
+          <div className="space-y-3">
+            {entretiens.map((offre) => (
+              <div key={offre.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface-3 border border-bordure">
+                <div className="w-8 h-8 rounded-lg bg-vert/10 flex items-center justify-center">
+                  <Calendar className="w-4 h-4 text-vert" />
                 </div>
-                <StatutBadge statut={o.statut} />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">{offre.titre}</p>
+                  <p className="text-xs text-text-dim">{offre.entreprise}</p>
+                </div>
               </div>
             ))}
           </div>

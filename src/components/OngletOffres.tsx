@@ -1,160 +1,137 @@
 import { useState } from 'react'
 import { useStore, type Offre } from '../store/useStore'
-import { joursDepuis } from '../utils/offres'
-import { Briefcase, Plus, ExternalLink, Trash2, FileText, MapPin } from 'lucide-react'
+import { Briefcase, Plus, ExternalLink, Trash2, MapPin, Clock } from 'lucide-react'
+import { Bouton } from './ui/Bouton'
+import { StatutBadge } from './ui/StatutBadge'
+
+const STATUTS: Offre['statut'][] = ['a_postuler', 'postulee', 'relancee', 'entretien', 'refus', 'acceptee']
 
 export default function OngletOffres() {
   const offres = useStore((s) => s.offres)
-  const addOffre = useStore((s) => s.addOffre)
   const removeOffre = useStore((s) => s.removeOffre)
-  const [showForm, setShowForm] = useState(false)
-  const [url, setUrl] = useState('')
-  const [manuel, setManuel] = useState({ titre: '', entreprise: '', source: '', ville: '' })
+  const updateOffre = useStore((s) => s.updateOffre)
+  const setCurrentTab = useStore((s) => s.setCurrentTab)
 
-  const ajouterDepuisUrl = () => {
-    if (!url.trim()) return
-    try {
-      const parsed = new URL(url)
-      const sourceMap: Record<string, string> = { 'indeed.fr': 'Indeed', 'francebleu.fr': 'France Bleu', 'linkedin.com': 'LinkedIn', 'welcometothejungle.com': 'Welcome to the Jungle', 'apec.fr': 'APEC', 'franceboulot': 'France Boulot', 'regionsjob': 'RégionsJob' }
-      const source = Object.entries(sourceMap).find(([k]) => parsed.hostname.includes(k))?.[1] || parsed.hostname
-      const titre = parsed.pathname.split('/').filter(Boolean).pop()?.replace(/-/g, ' ') || 'Offre'
-      addOffre({ id: '', titre, entreprise: 'À déterminer', description: '', url: parsed.href, source, dateAjout: new Date().toISOString(), statut: 'a_postuler', notes: '', ville: '' })
-      setUrl('')
-      setShowForm(false)
-    } catch { /* pas une URL valide, on laisse remplir manuel */ }
-  }
+  const [filtreStatut, setFiltreStatut] = useState<Offre['statut'] | 'tout'>('tout')
+  const [recherche, setRecherche] = useState('')
 
-  const ajouterManuellement = () => {
-    if (!manuel.titre.trim() || !manuel.entreprise.trim()) return
-    addOffre({ id: '', titre: manuel.titre, entreprise: manuel.entreprise, description: '', url: '', source: manuel.source || 'Manuelle', dateAjout: new Date().toISOString(), statut: 'a_postuler', notes: '', ville: manuel.ville || '' })
-    setManuel({ titre: '', entreprise: '', source: '', ville: '' })
-    setShowForm(false)
-  }
+  const filtrees = offres.filter((o) => {
+    if (filtreStatut !== 'tout' && o.statut !== filtreStatut) return false
+    if (recherche) {
+      const q = recherche.toLowerCase()
+      return o.titre.toLowerCase().includes(q) || o.entreprise.toLowerCase().includes(q)
+    }
+    return true
+  })
 
-  const getIcon = (source: string) => {
-    const s = source.toLowerCase()
-    if (s.includes('linkedin')) return 'in'
-    if (s.includes('indeed')) return '!'
-    if (s.includes('apec')) return 'A'
-    if (s.includes('welcometothejungle')) return 'W'
-    if (s.includes('france')) return 'FT'
-    return <FileText className="w-4 h-4" />
-  }
-
-  const triStatut: Offre['statut'][] = ['a_postuler', 'postulee', 'relancee', 'entretien', 'refus', 'acceptee']
-  const statutLabels: Record<string, string> = { a_postuler: 'À postuler', postulee: 'Postulée', relancee: 'Relancée', entretien: 'En entretien', refus: 'Refus', acceptee: 'Acceptée' }
-  const statutCouleurs: Record<string, string> = { a_postuler: 'bg-taupe/20 text-taupe', postulee: 'bg-sable/20 text-cacao', relancee: 'bg-ambre/10 text-action', entretien: 'bg-vert-success/10 text-vert-success', refus: 'bg-rouge-error/10 text-rouge-error', acceptee: 'bg-vert-success/20 text-vert-success' }
-
-  if (offres.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <Briefcase className="w-7 h-7 text-action" />
-            <h1 className="text-2xl font-bold text-cacao">Mes offres</h1>
-          </div>
-          <button onClick={() => setShowForm(true)}
-            className="bg-action text-white rounded-xl px-5 py-2.5 flex items-center gap-2 hover:opacity-90 transition-all font-medium">
-            <Plus className="w-5 h-5" /> Ajouter
-          </button>
-        </div>
-
-        <div className="rounded-2xl bg-white border border-bordure shadow-sm p-12 text-center">
-          <Briefcase className="w-14 h-14 text-sable mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-cacao mb-2">Aucune offre</h2>
-          <p className="text-base text-taupe mb-6">Ajoute ta première offre d'emploi.</p>
-          <button onClick={() => setShowForm(true)}
-            className="bg-action text-white rounded-xl px-6 py-3 flex items-center gap-2 hover:opacity-90 transition-all font-medium">Ajouter une offre</button>
-        </div>
-
-        {showForm && formulaireAjout()}
-      </div>
-    )
-  }
-
-  function formulaireAjout() {
-    return (
-      <div className="rounded-2xl bg-white border border-bordure shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-cacao mb-4">Nouvelle offre</h3>
-        <div className="space-y-4">
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Colle l'URL de l'offre (détection automatique)"
-            className="w-full px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
-          <button onClick={ajouterDepuisUrl}
-            className="bg-sable text-cacao rounded-xl px-5 py-2.5 text-base font-medium hover:opacity-90 transition-all">Détecter depuis l'URL</button>
-
-          <p className="text-sm text-taupe text-center">ou ajouter manuellement</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <input value={manuel.titre} onChange={(e) => setManuel({ ...manuel, titre: e.target.value })}
-              placeholder="Titre du poste" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
-            <input value={manuel.entreprise} onChange={(e) => setManuel({ ...manuel, entreprise: e.target.value })}
-              placeholder="Entreprise" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
-            <input value={manuel.source} onChange={(e) => setManuel({ ...manuel, source: e.target.value })}
-              placeholder="Source (Indeed, LinkedIn...)" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
-            <input value={manuel.ville} onChange={(e) => setManuel({ ...manuel, ville: e.target.value })}
-              placeholder="Ville" className="px-4 py-3 rounded-xl border border-bordure bg-white text-cacao text-base placeholder:text-taupe/70 focus:outline-none focus:ring-2 focus:ring-action/50" />
-          </div>
-          <button onClick={ajouterManuellement} disabled={!manuel.titre.trim() || !manuel.entreprise.trim()}
-            className="w-full bg-action text-white rounded-xl px-5 py-3 text-base font-medium hover:opacity-90 disabled:opacity-40 transition-all">Ajouter l'offre</button>
-        </div>
-      </div>
-    )
-  }
-
-  const groupees = triStatut.map((s) => ({ statut: s, offres: offres.filter((o) => o.statut === s) }))
+  const countParStatut = (s: Offre['statut']) => offres.filter((o) => o.statut === s).length
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-2">
+    <div className="space-y-6 animate-fadeIn">
+      {/* En-tête */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Briefcase className="w-7 h-7 text-action" />
-          <h1 className="text-2xl font-semibold text-cacao">Mes offres <span className="text-taupe text-lg font-normal ml-1">({offres.length})</span></h1>
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-action to-action-vif flex items-center justify-center shadow-lg shadow-action-glow">
+            <Briefcase className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1>Offres d'emploi</h1>
+            <p className="text-text-dim text-sm">{offres.length} offre{offres.length > 1 ? 's' : ''} suivie{offres.length > 1 ? 's' : ''}</p>
+          </div>
         </div>
-        <button onClick={() => setShowForm(!showForm)}
-          className="bg-action text-white rounded-xl px-5 py-2.5 flex items-center gap-2 hover:opacity-90 transition-all font-medium">
-          <Plus className="w-5 h-5" />{showForm ? 'Fermer' : 'Ajouter'}</button>
+        <Bouton variant="primaire" onClick={() => setCurrentTab('postuler')}>
+          <Plus className="w-4 h-4" /> Nouvelle offre
+        </Bouton>
       </div>
 
-      {showForm && formulaireAjout()}
+      {/* Barre recherche + filtres */}
+      <div className="relative">
+        <input
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder="Rechercher par titre ou entreprise..."
+          className="w-full pl-10 pr-4 py-3 rounded-xl border border-bordure bg-surface-2 text-text text-sm placeholder:text-text-muted/60 focus:border-action focus:ring-1 focus:ring-action/30 transition-all"
+        />
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted text-lg">🔍</span>
+      </div>
 
-      <div className="space-y-6">
-        {groupees.map((g) => {
-          if (g.offres.length === 0) return null
-          return (
-            <div key={g.statut}>
-              <h2 className="text-lg font-semibold text-cacao mb-3">{statutLabels[g.statut] || g.statut} · {g.offres.length}</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {g.offres.map((o) => (
-                  <article key={o.id} className="rounded-2xl bg-white border border-bordure shadow-sm p-5 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3 mb-3">
-                      <span className="w-8 h-8 rounded-lg bg-creme flex items-center justify-center text-sm font-bold text-taupe flex-shrink-0">{getIcon(o.source)}</span>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-semibold text-cacao truncate">{o.titre}</h3>
-                        <p className="text-base text-taupe">{o.entreprise}</p>
-                      </div>
-                    </div>
+      {/* Filtres statut */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setFiltreStatut('tout')}
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+            filtreStatut === 'tout' ? 'bg-action/15 text-white border border-action/20' : 'bg-surface-2 text-text-dim hover:text-text border border-bordure'
+          }`}
+        >
+          Toutes ({offres.length})
+        </button>
+        {STATUTS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setFiltreStatut(s)}
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              filtreStatut === s ? 'bg-action/15 text-white border border-action/20' : 'bg-surface-2 text-text-dim hover:text-text border border-bordure'
+            }`}
+          >
+            {s === 'a_postuler' ? 'À postuler' : s.charAt(0).toUpperCase() + s.slice(1)} ({countParStatut(s)})
+          </button>
+        ))}
+      </div>
 
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-taupe mb-3">
-                      {o.ville && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{o.ville}</span>}
-                      <span>Ajoutée il y a {joursDepuis(o.dateAjout)}</span>
+      {/* Liste offres */}
+      {filtrees.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="w-16 h-16 rounded-2xl bg-surface-3 flex items-center justify-center mx-auto mb-4">
+            <Briefcase className="w-8 h-8 text-text-muted" />
+          </div>
+          <p className="text-text-dim text-lg font-medium mb-1">Aucune offre trouvée</p>
+          <p className="text-text-muted text-sm mb-6">
+            {recherche ? 'Essayez d\'autres mots-clés' : 'Ajoutez votre première offre pour commencer'}
+          </p>
+          {!recherche && <Bouton variant="primaire" onClick={() => setCurrentTab('postuler')}><Plus className="w-4 h-4" /> Ajouter une offre</Bouton>}
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {filtrees.map((offre) => (
+            <div key={offre.id} className="rounded-2xl border border-bordure bg-surface-2 p-6 shadow-sm card-hover">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-xl bg-surface-3 flex items-center justify-center shrink-0">
+                      <Briefcase className="w-5 h-5 text-text-dim" />
                     </div>
-
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-bordure">
-                      <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${statutCouleurs[o.statut] || ''}`}>
-                        {statutLabels[o.statut] || o.statut}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {o.url && <a href={o.url} target="_blank" rel="noreferrer" className="p-2 text-taupe hover:text-action transition-colors rounded-lg hover:bg-ambre/5"><ExternalLink className="w-4 h-4" /></a>}
-                        <button onClick={() => removeOffre(o.id)} className="p-2 text-taupe hover:text-rouge-error transition-colors rounded-lg hover:bg-rouge-error/5"><Trash2 className="w-4 h-4" /></button>
-                      </div>
+                    <div>
+                      <h3 className="text-white font-semibold">{offre.titre}</h3>
+                      <p className="text-text-dim text-sm">{offre.entreprise}</p>
                     </div>
-                  </article>
-                ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-text-muted">
+                    {offre.ville && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {offre.ville}</span>}
+                    {offre.dateAjout && <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(offre.dateAjout).toLocaleDateString('fr-FR')}</span>}
+                    {offre.url && (
+                      <a href={offre.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-action hover:text-action-vif">
+                        <ExternalLink className="w-3.5 h-3.5" /> Voir l'offre
+                      </a>
+                    )}
+                  </div>
+                  {offre.notes && <p className="text-text-dim text-sm mt-3">{offre.notes}</p>}
+                </div>
+                <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 shrink-0">
+                  <StatutBadge statut={offre.statut} />
+                  {offre.statut === 'a_postuler' && (
+                    <Bouton variant="primaire" onClick={() => { updateOffre(offre.id, { statut: 'postulee', datePostulation: new Date().toISOString().split('T')[0] }) }}>
+                      Postuler
+                    </Bouton>
+                  )}
+                  <button onClick={() => removeOffre(offre.id)} className="text-text-muted hover:text-rouge-error p-2 rounded-lg hover:bg-rouge-error/10 transition-all" title="Supprimer">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

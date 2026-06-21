@@ -1,9 +1,8 @@
-// Chip : tag avec bouton de suppression
 export function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 bg-ambre/10 text-action text-sm px-3 py-1 rounded-xl font-medium">
+    <span className="inline-flex items-center gap-1.5 bg-action/10 text-action-vif text-sm px-3 py-1.5 rounded-xl font-medium border border-action/15">
       {label}
-      <button type="button" onClick={onRemove} className="hover:text-rouge-error transition-colors ml-1 text-xs">&times;</button>
+      <button onClick={onRemove} className="hover:text-rouge-error transition-colors ml-0.5 text-text-dim hover:text-text">&times;</button>
     </span>
   )
 }
