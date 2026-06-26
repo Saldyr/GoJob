@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { useShallow } from 'zustand/react/shallow'
+import type { CanalOffre } from '../utils/offres'
 
 export interface Profile {
   nom: string
@@ -19,16 +19,7 @@ export interface Profile {
   formation: string
 }
 
-export type StatutOffre = 'a_postuler' | 'postulee' | 'relancee' | 'entretien' | 'refus' | 'acceptee'
-
-export interface Document {
-  id: string
-  nom: string
-  type: 'cv' | 'portfolio' | 'lettre' | 'autre'
-  texte: string
-  dateAjout: string
-  chemin?: string
-}
+export type TypeContrat = 'cdi' | 'cdd' | 'freelance' | 'stage' | 'alternance' | 'interim' | ''
 
 export interface Offre {
   id: string
@@ -38,18 +29,17 @@ export interface Offre {
   url: string
   source: string
   dateAjout: string
-  statut: StatutOffre
-  datePostulation?: string
-  dateRelance?: string
   notes: string
-  lettre?: string           // H4 : lettre sauvegardée attachée à l'offre
   ville?: string
+  typeContrat?: TypeContrat
+  remote?: boolean
+  tags?: string[]
+  salaire?: string
 }
 
 export interface AppState {
   profile: Profile
   offres: Offre[]
-  documents: Document[]
   settings: {
     cleApi: string
     endpoint: string
@@ -62,8 +52,11 @@ export interface AppState {
     imapUser: string
     imapPassword: string
     imapTLS: boolean
+    adzunaAppId: string
+    adzunaAppKey: string
+    joobleKey: string
+    reedKey: string
   }
-  onboardingDone: boolean
   setProfile: (p: Profile) => void
   updateProfile: (p: Partial<Profile>) => void
   addOffre: (o: Offre) => void
@@ -72,10 +65,10 @@ export interface AppState {
   updateSettings: (s: Partial<AppState['settings']>) => void
   currentTab: string
   setCurrentTab: (tab: string) => void
-  addDocument: (d: Document) => void
-  removeDocument: (id: string) => void
-  updateDocument: (id: string, data: Partial<Document>) => void
-  setOnboardingDone: (done: boolean) => void
+  searchMotsCles: string[]
+  setSearchMotsCles: (mots: string[]) => void
+  offresFiltre: CanalOffre
+  setOffresFiltre: (o: CanalOffre) => void
   loadFromDisk: () => void
   saveToDisk: () => void
 }
@@ -98,6 +91,24 @@ const DEFAULT_PROFILE: Profile = {
   formation: '',
 }
 
+const DEFAULT_SETTINGS: AppState['settings'] = {
+  cleApi: '',
+  endpoint: 'https://api.groq.com/openai/v1',
+  modele: 'llama-3.3-70b-versatile',
+  langue: 'fr',
+  franceTravailClientId: '',
+  franceTravailClientSecret: '',
+  imapHost: '',
+  imapPort: 993,
+  imapUser: '',
+  imapPassword: '',
+  imapTLS: true,
+  adzunaAppId: '',
+  adzunaAppKey: '',
+  joobleKey: '',
+  reedKey: '',
+}
+
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
@@ -113,14 +124,13 @@ function safeParse(data: unknown): boolean {
 }
 
 function migrerDepuisLegacy(parsed: Record<string, unknown>): Record<string, unknown> {
-  // Version 0 → 1 : ajout ville/notes/lettre sur chaque offre si manquant
+  // Version 0 → 1 : ajout ville/notes sur chaque offre si manquant
   if (parsed._schemaVersion === 1) return parsed
   const offres = (parsed.offres || []) as Array<Record<string, unknown>>
   parsed.offres = offres.map((o) => ({
     ...o,
     ville: o.ville || '',
     notes: o.notes || '',
-    lettre: o.lettre || '',
   }))
   parsed._schemaVersion = SCHEMA_VERSION
   return parsed
@@ -129,21 +139,7 @@ function migrerDepuisLegacy(parsed: Record<string, unknown>): Record<string, unk
 export const useStore = create<AppState>((set, get) => ({
   profile: { ...DEFAULT_PROFILE },
   offres: [],
-  documents: [],
-  settings: {
-    cleApi: '',
-    endpoint: 'https://api.deepseek.com/v1',
-    modele: 'deepseek-chat',
-    langue: 'fr',
-    franceTravailClientId: '',
-    franceTravailClientSecret: '',
-    imapHost: '',
-    imapPort: 993,
-    imapUser: '',
-    imapPassword: '',
-    imapTLS: true,
-  },
-  onboardingDone: false,
+  settings: { ...DEFAULT_SETTINGS },
 
   setProfile: (p) => set({ profile: p }),
   updateProfile: (p) => set((s) => ({ profile: { ...s.profile, ...p } })),
@@ -173,23 +169,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   currentTab: 'accueil',
   setCurrentTab: (tab: string) => set({ currentTab: tab }),
-
-  addDocument: (d) =>
-    set((s) => ({
-      documents: [{ ...d, id: d.id || generateId(), dateAjout: d.dateAjout || new Date().toISOString() }, ...s.documents],
-    })),
-
-  removeDocument: (id) =>
-    set((s) => ({
-      documents: s.documents.filter((d) => d.id !== id),
-    })),
-
-  updateDocument: (id, data) =>
-    set((s) => ({
-      documents: s.documents.map((d) => (d.id === id ? { ...d, ...data } : d)),
-    })),
-
-  setOnboardingDone: (done) => set({ onboardingDone: done }),
+  searchMotsCles: [],
+  setSearchMotsCles: (mots) => set({ searchMotsCles: mots }),
+  offresFiltre: 'tout',
+  setOffresFiltre: (o) => set({ offresFiltre: o }),
 
   loadFromDisk: () => {
     try {
@@ -208,46 +191,45 @@ export const useStore = create<AppState>((set, get) => ({
           set({
             profile: { ...DEFAULT_PROFILE },
             offres: [],
-            documents: [],
-            settings: {
-              cleApi: '', endpoint: 'https://api.deepseek.com/v1', modele: 'deepseek-chat',
-              langue: 'fr', franceTravailClientId: '', franceTravailClientSecret: '',
-              imapHost: '', imapPort: 993, imapUser: '', imapPassword: '', imapTLS: true,
-            },
-            onboardingDone: false,
+            settings: { ...DEFAULT_SETTINGS },
           })
           return
         }
 
         const migre = migrerDepuisLegacy(parsed)
-        // RESTE : on ne lit QUE les settings non-secrets depuis localStorage.
+        // On ne lit QUE les settings non-secrets depuis localStorage.
         // Les secrets (cleApi, imapUser, imapPassword, franceTravailClientId/Secret)
         // sont chargés depuis safeStorage côté OngletReglages au montage.
         const lsSettings = (migre.settings as Record<string, unknown>) || {}
-        const safeSettings = {
+        const safeSettings: AppState['settings'] = {
           cleApi: '',
           franceTravailClientId: '',
           franceTravailClientSecret: '',
           imapUser: '',
           imapPassword: '',
+          adzunaAppId: '',
+          adzunaAppKey: '',
+          joobleKey: '',
+          reedKey: '',
           imapHost: (lsSettings.imapHost as string) || '',
           imapPort: (lsSettings.imapPort as number) ?? 993,
           imapTLS: (lsSettings.imapTLS as boolean) ?? true,
-          endpoint: (lsSettings.endpoint as string) || 'https://api.deepseek.com/v1',
-          modele: (lsSettings.modele as string) || 'deepseek-chat',
+          endpoint: (lsSettings.endpoint as string) || DEFAULT_SETTINGS.endpoint,
+          modele: (lsSettings.modele as string) || DEFAULT_SETTINGS.modele,
           langue: (lsSettings.langue as string) || 'fr',
         }
         set({
           profile: (migre.profile as Profile) || { ...DEFAULT_PROFILE },
           offres: ((migre.offres as Array<Record<string, unknown>>) || []).map((o) => ({
             ...o,
-            lettre: (o.lettre as string) || '',
             ville: (o.ville as string) || '',
             notes: (o.notes as string) || '',
+            typeContrat: (o.typeContrat as string) || '',
+            remote: (o.remote as boolean) || false,
+            tags: Array.isArray(o.tags) ? o.tags : [],
+            salaire: (o.salaire as string) || '',
           } as Offre)),
-          documents: (migre.documents as Document[]) || [],
           settings: safeSettings,
-          onboardingDone: (migre.onboardingDone as boolean) || false,
         })
       }
     } catch (e) {
@@ -263,59 +245,38 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   saveToDisk: () => {
-    try {
-      const s = get()
-      // On ne persiste que les settings NON secrets dans localStorage.
-      // cleApi, imapUser, imapPassword, franceTravailClientId/Secret
-      // sont gérés exclusivement par safeStorage via sauvegarderSecrets IPC.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { cleApi, imapUser, imapPassword, franceTravailClientId, franceTravailClientSecret, ...safeSettings } = s.settings
+    const s = get()
+    // On ne persiste que les settings NON secrets dans localStorage.
+    // cleApi, imapUser, imapPassword, franceTravailClientId/Secret
+    // sont gérés exclusivement par safeStorage via sauvegarderSecrets IPC.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { cleApi, imapUser, imapPassword, franceTravailClientId, franceTravailClientSecret, adzunaAppId, adzunaAppKey, joobleKey, reedKey, ...safeSettings } = s.settings
+    // On ne persiste PAS le champ `description` (souvent plusieurs Ko pour France Travail,
+    // jamais affiché dans l'UI) : avec des milliers d'offres il ferait exploser le quota
+    // localStorage (~5 Mo) → la sauvegarde échouerait et on perdrait les offres.
+    const offresLight = s.offres.map((o) => ({ ...o, description: '' }))
+    const ecrire = (offres: typeof offresLight) =>
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({
-          _schemaVersion: SCHEMA_VERSION,
-          profile: s.profile,
-          offres: s.offres,
-          documents: s.documents,
-          settings: safeSettings,
-          onboardingDone: s.onboardingDone,
-        })
+        JSON.stringify({ _schemaVersion: SCHEMA_VERSION, profile: s.profile, offres, settings: safeSettings })
       )
-    } catch (e) {
-      console.warn('Erreur sauvegarde data:', e)
+    try {
+      ecrire(offresLight)
+    } catch {
+      // Quota dépassé malgré tout : on conserve les 2000 offres les plus récentes plutôt que de tout perdre.
+      try {
+        const recentes = [...offresLight]
+          .sort((a, b) => new Date(b.dateAjout || 0).getTime() - new Date(a.dateAjout || 0).getTime())
+          .slice(0, 2000)
+        ecrire(recentes)
+      } catch (e) {
+        console.warn('Erreur sauvegarde data (quota):', e)
+      }
     }
   },
 }))
 
-// ── Sélecteurs atomiques Zustand ──────────────────────────
-// Chaque sélecteur ne souscrit qu'à la propriété qu'il lit.
-export const useProfile = () => useStore((s) => s.profile)
-export const useOffres = () => useStore((s) => s.offres)
-export const useDocuments = () => useStore((s) => s.documents)
-export const useSettings = () => useStore((s) => s.settings)
-export const useCurrentTab = () => useStore((s) => s.currentTab)
-export const useOnboardingDone = () => useStore((s) => s.onboardingDone)
-
-// Sélecteurs actions (les références fonctions ne changent jamais → pas de re-render)
-export const useActions = () => useStore(
-  useShallow((s) => ({
-    setProfile: s.setProfile,
-    updateProfile: s.updateProfile,
-    addOffre: s.addOffre,
-    updateOffre: s.updateOffre,
-    removeOffre: s.removeOffre,
-    updateSettings: s.updateSettings,
-    setCurrentTab: s.setCurrentTab,
-    addDocument: s.addDocument,
-    removeDocument: s.removeDocument,
-    updateDocument: s.updateDocument,
-    setOnboardingDone: s.setOnboardingDone,
-    loadFromDisk: s.loadFromDisk,
-    saveToDisk: s.saveToDisk,
-  }))
-)
-
-// Chargement auto + sauvegarde auto
+// Chargement auto + sauvegarde auto (debounce 1s)
 const store = useStore.getState()
 store.loadFromDisk()
 

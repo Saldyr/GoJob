@@ -31,3 +31,4 @@ dist-ssr
 # Build artifacts — pas dans git
 release/
 /nul
+test-screenshots/

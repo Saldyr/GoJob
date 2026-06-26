@@ -1,485 +1,347 @@
-import { motion } from 'framer-motion'
+import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import {
-  Briefcase,
-  MessageCircle,
-  Calendar,
-  BarChart3,
-  PlusCircle,
-  FileEdit,
-  Sparkles,
-  CheckCircle,
-  Target,
-  TrendingUp,
-  UserCheck,
-  Star,
+  Building2,
+  Mail,
+  Globe,
+  ExternalLink,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  LayoutDashboard,
+  Layers,
 } from 'lucide-react'
-import { joursDepuis } from '../utils/offres'
+import { joursDepuis, origineOffre, familleSource, canalOffre, PLATEFORMES, type CanalOffre } from '../utils/offres'
 import { Carte } from './ui/Carte'
 import { Bouton } from './ui/Bouton'
-import { StatutBadge } from './ui/StatutBadge'
+import PageHeader from './ui/PageHeader'
+import { useT } from '../i18n/useT'
 
-// ── Tuile statistique ──────────────────────────────────────
-function Tuile({
-  valeur,
-  label,
-  icone,
-  accent,
-}: {
-  valeur: number | string
-  label: string
-  icone: React.ReactNode
-  accent: string
-}) {
-  return (
-    <motion.div
-      whileHover={{ y: -3, boxShadow: '0 8px 24px rgba(0,0,0,0.20), 0 16px 48px rgba(0,0,0,0.15)' }}
-      className="rounded-2xl bg-surface-2 border border-bordure shadow-sm p-6 card-hover"
-    >
-      <div className="flex items-center gap-3 mb-3">
-        <div
-          className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${accent}`}
-        >
-          {icone}
-        </div>
-        <p className="text-3xl font-bold text-white">{valeur}</p>
-      </div>
-      <p className="text-sm text-text-dim">{label}</p>
-    </motion.div>
-  )
-}
-
-// ── Animations stagger ─────────────────────────────────────
-const stagger = {
-  container: { animate: { transition: { staggerChildren: 0.06 } } },
-  item: {
-    initial: { opacity: 0, y: 12 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.22 } },
-  },
-}
-
-// ── Composant principal ────────────────────────────────────
 export default function OngletAccueil() {
   const offres = useStore((s) => s.offres)
-  const profile = useStore((s) => s.profile)
+  const addOffre = useStore((s) => s.addOffre)
+  const searchMotsCles = useStore((s) => s.searchMotsCles)
   const settings = useStore((s) => s.settings)
   const setCurrentTab = useStore((s) => s.setCurrentTab)
+  const setOffresFiltre = useStore((s) => s.setOffresFiltre)
+  const { t } = useT()
+  const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'ok' | 'erreur'>('idle')
+  const [importMessage, setImportMessage] = useState('')
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+  // ── Import boîte mail (IMAP) ───────────────────────────
+  const importerDepuisIMAP = async () => {
+    if (!window.electronAPI?.imapFetchRecent) {
+      setImportStatus('erreur')
+      setImportMessage('API Electron non disponible (lance l\'app avec npm run electron:dev)')
+      return
+    }
+    setImportStatus('loading')
+    setImportMessage(t('dashboard.import.status.loading'))
 
-  const offresRecentes = offres.filter(
-    (o) => o.dateAjout && new Date(o.dateAjout) >= sevenDaysAgo,
-  )
-  const offresTriees = [...offres].sort(
-    (a, b) =>
-      new Date(b.dateAjout || 0).getTime() - new Date(a.dateAjout || 0).getTime(),
-  )
+    try {
+      const result = await window.electronAPI.imapFetchRecent({
+        host: settings.imapHost,
+        port: settings.imapPort || 993,
+        user: settings.imapUser,
+        password: settings.imapPassword,
+        tlsEnabled: settings.imapTLS !== false,
+        maxEmails: 150,
+      })
 
-  const postulees = offres.filter((o) => o.statut === 'postulee').length
-  const entretiens = offres.filter((o) => o.statut === 'entretien').length
-  const sauvegardees = offres.filter((o) => o.statut === 'a_postuler').length
+      if (result.ok) {
+        const recues = result.offres || []
+        const urlsExistantes = new Set(useStore.getState().offres.map((o) => o.url).filter(Boolean))
+        const nouvelles = recues.filter((o) => o.url && !urlsExistantes.has(o.url))
+        for (const o of nouvelles) addOffre(o)
+        setImportStatus('ok')
+        if (nouvelles.length > 0) {
+          setImportMessage(`${nouvelles.length} offre${nouvelles.length > 1 ? 's' : ''} importée${nouvelles.length > 1 ? 's' : ''}`)
+        } else if (recues.length > 0) {
+          setImportMessage('Aucune nouvelle offre (toutes déjà importées).')
+        } else if ((result.total || 0) === 0) {
+          setImportMessage('Aucune alerte emploi trouvée (LinkedIn, Indeed, Meteojob…) dans les 30 derniers jours.')
+        } else {
+          setImportMessage('Alertes trouvées, mais aucun lien d\'offre détecté dedans.')
+        }
+      } else {
+        setImportStatus('erreur')
+        setImportMessage(result.erreur || t('dashboard.import.status.error'))
+      }
+    } catch (e) {
+      setImportStatus('erreur')
+      setImportMessage(e instanceof Error ? e.message : 'Erreur inconnue')
+    }
+  }
 
-  // Pourcentage du profil complété
-  const champsProfil: (keyof typeof profile)[] = [
-    'nom', 'prenom', 'titre', 'email', 'telephone', 'resume', 'localisation',
+  // ── Import France Travail ──────────────────────────────
+  const importerDepuisFT = async () => {
+    if (!settings.franceTravailClientId || !settings.franceTravailClientSecret) {
+      setImportStatus('erreur')
+      setImportMessage(t('dashboard.import.status.noFTConfig'))
+      return
+    }
+    if (!window.electronAPI?.franceTravailConnect) {
+      setImportStatus('erreur')
+      setImportMessage(t('dashboard.import.status.ftSearchError'))
+      return
+    }
+    setImportStatus('loading')
+    setImportMessage(t('dashboard.import.status.loading'))
+
+    try {
+      const connect = await window.electronAPI.franceTravailConnect({
+        clientId: settings.franceTravailClientId,
+        clientSecret: settings.franceTravailClientSecret,
+      })
+      if (!connect.ok) {
+        setImportStatus('erreur')
+        setImportMessage(connect.erreur || t('dashboard.import.status.ftError'))
+        return
+      }
+
+      setImportMessage(t('dashboard.import.status.loading'))
+      const result = await window.electronAPI.franceTravailOffres({
+        motsCles: searchMotsCles.join(' ').trim(),
+        localisation: '',
+      })
+
+      if (result.ok) {
+        const nouvellesOffres = result.offres || []
+        for (const o of nouvellesOffres) {
+          addOffre(o)
+        }
+        setImportStatus('ok')
+        setImportMessage(t('dashboard.import.status.ok', { count: nouvellesOffres.length }))
+      } else {
+        setImportStatus('erreur')
+        setImportMessage(result.erreur || t('dashboard.import.status.ftSearchError'))
+      }
+    } catch (e) {
+      setImportStatus('erreur')
+      setImportMessage(e instanceof Error ? e.message : 'Erreur inconnue')
+    }
+  }
+
+  // ── Import plateformes en ligne (Adzuna) ───────────────
+  const importerEnLigne = async () => {
+    if (!window.electronAPI?.chercherEnLigne) {
+      setImportStatus('erreur')
+      setImportMessage('API Electron non disponible.')
+      return
+    }
+    setImportStatus('loading')
+    setImportMessage('Recherche en ligne…')
+    try {
+      const r = await window.electronAPI.chercherEnLigne({
+        motsCles: searchMotsCles.join(' ').trim(),
+        localisation: '',
+        adzunaAppId: settings.adzunaAppId,
+        adzunaAppKey: settings.adzunaAppKey,
+        joobleKey: settings.joobleKey,
+        reedKey: settings.reedKey,
+      })
+      if (r.ok) {
+        const recues = r.offres || []
+        const urls = new Set(useStore.getState().offres.map((o) => o.url).filter(Boolean))
+        const nouvelles = recues.filter((o) => o.url && !urls.has(o.url))
+        for (const o of nouvelles) addOffre(o)
+        setImportStatus('ok')
+        setImportMessage(
+          nouvelles.length > 0
+            ? `${nouvelles.length} offre${nouvelles.length > 1 ? 's' : ''} importée${nouvelles.length > 1 ? 's' : ''}`
+            : r.erreurs && r.erreurs.length ? r.erreurs[0] : 'Aucune nouvelle offre en ligne.'
+        )
+      } else {
+        setImportStatus('erreur')
+        setImportMessage('Échec de la recherche en ligne.')
+      }
+    } catch (e) {
+      setImportStatus('erreur')
+      setImportMessage(e instanceof Error ? e.message : 'Erreur inconnue')
+    }
+  }
+
+  // ── Données dérivées ───────────────────────────────────
+  const nbFT = offres.filter((o) => origineOffre(o) === 'france-travail').length
+  const nbMail = offres.filter((o) => origineOffre(o) === 'email').length
+  const trier = (liste: typeof offres, limite = 10) =>
+    [...liste]
+      .sort((a, b) => new Date(b.dateAjout || 0).getTime() - new Date(a.dateAjout || 0).getTime())
+      .slice(0, limite)
+  const dernieresMail = trier(offres.filter((o) => origineOffre(o) === 'email'))
+  const dernieresFT = trier(offres.filter((o) => origineOffre(o) === 'france-travail'))
+  const offresPlateforme = offres.filter((o) => origineOffre(o) === 'plateforme')
+  // Cartes dédiées toujours affichées + toute autre plateforme ayant des offres
+  const famillesAffichees = [
+    ...new Set([...PLATEFORMES, ...offresPlateforme.map((o) => familleSource(o.source))]),
   ]
-  const remplis = champsProfil.filter((k) => profile[k]?.toString().trim() !== '').length
-  const pctProfil = Math.round((remplis / champsProfil.length) * 100)
 
-  // Dernière offre en cours (relancée ou avec le statut le plus avancé)
-  const offreEnCours = offresTriees.find(
-    (o) => o.statut === 'relancee' || o.statut === 'entretien',
-  )
+  const ouvrirOffres = (filtre: CanalOffre) => {
+    setOffresFiltre(filtre)
+    setCurrentTab('offres')
+  }
 
-  const hasGuest = profile.nom === '' && offres.length === 0
+  const renderListe = (liste: typeof offres, videMsg: string) =>
+    liste.length > 0 ? (
+      <div className="space-y-2">
+        {liste.map((o) => (
+          <div
+            key={o.id}
+            className="flex items-center gap-3 p-3.5 rounded-xl bg-surface-3 border border-bordure cursor-pointer hover:bg-surface-3/80 transition-colors"
+            onClick={() => (o.url ? window.electronAPI?.openUrl?.(o.url) : setCurrentTab('offres'))}
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white truncate font-medium">{o.titre}</p>
+              <p className="text-xs text-text-dim truncate">
+                {o.entreprise || o.source}{o.ville ? ` · ${o.ville}` : ''}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-text-muted whitespace-nowrap">{o.dateAjout ? `${joursDepuis(o.dateAjout)}j` : ''}</span>
+              {o.url && <ExternalLink className="w-3.5 h-3.5 text-text-muted" />}
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <p className="text-sm text-text-muted text-center py-6">{videMsg}</p>
+    )
 
-  // Messages simulés à partir des offres avec lettre (proxy "messages récents")
-  const offresAvecLettre = offres.filter((o) => o.lettre && o.statut === 'postulee')
+  // Un dégradé distinct par plateforme (ordre = PLATEFORMES)
+  const ACCENTS_PLATEFORME = ['from-vert to-vert/70', 'from-orange-500 to-orange-400', 'from-cyan-500 to-cyan-400']
+  const compteurs: { filtre: CanalOffre; label: string; valeur: number; icone: React.ReactNode; accent: string }[] = [
+    { filtre: 'tout', label: 'Total des offres', valeur: offres.length, icone: <Layers className="w-5 h-5 text-white" />, accent: 'from-action to-action-vif' },
+    { filtre: 'france-travail', label: 'France Travail', valeur: nbFT, icone: <Building2 className="w-5 h-5 text-white" />, accent: 'from-electric to-electric/70' },
+    { filtre: 'email', label: 'Boîte mail', valeur: nbMail, icone: <Mail className="w-5 h-5 text-white" />, accent: 'from-rose to-rose/70' },
+    ...PLATEFORMES.map((p, i) => ({
+      filtre: p as CanalOffre,
+      label: p,
+      valeur: offres.filter((o) => canalOffre(o) === p).length,
+      icone: <Globe className="w-5 h-5 text-white" />,
+      accent: ACCENTS_PLATEFORME[i % ACCENTS_PLATEFORME.length],
+    })),
+  ]
 
   return (
-    <motion.div
-      className="space-y-10"
-      variants={stagger.container}
-      initial="initial"
-      animate="animate"
-    >
-      {/* ── En-tête ──────────────────────────────────────── */}
-      <motion.div
-        variants={stagger.item}
-        className="flex items-center gap-3 mb-1"
-      >
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-action to-action-vif flex items-center justify-center shadow-md shadow-action/20">
-          <Sparkles className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-white">Tableau de bord</h1>
-          <p className="text-sm text-text-dim mt-0.5">
-            Vue d'ensemble de ta recherche
-          </p>
-        </div>
-      </motion.div>
+    <div className="space-y-8 animate-fadeIn">
+      {/* En-tête */}
+      <PageHeader
+        icon={<LayoutDashboard className="w-5 h-5 text-white" />}
+        title="Tableau de bord"
+        subtitle={offres.length === 0 ? 'Importez vos offres pour démarrer' : `${offres.length} offre${offres.length > 1 ? 's' : ''} au total`}
+      />
 
-      {/* ── Onboarding : checklist 3 étapes ──────────────── */}
-      {hasGuest && (
-        <motion.section
-          variants={stagger.item}
-          className="rounded-2xl bg-surface-2 border border-bordure shadow-md p-8"
-        >
-          <div className="flex items-center gap-2.5 mb-6">
-            <Target className="w-5 h-5 text-action" />
-            <h2 className="text-lg font-semibold text-white">
-              Pour commencer, 3 étapes
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Bouton
-              variant="secondaire"
-              onClick={() => setCurrentTab('profil')}
-              className="flex flex-col items-start gap-3 w-full p-5 h-auto"
-            >
-              <span className="w-8 h-8 rounded-full bg-action-deep text-white flex items-center justify-center shrink-0 text-sm font-bold">
-                1
-              </span>
-              <div className="flex items-center gap-2 w-full">
-                <span className="text-base text-white font-medium">
-                  Compléter mon profil
-                </span>
-                {profile.nom !== '' && (
-                  <CheckCircle className="w-5 h-5 text-vert shrink-0 ml-auto" />
-                )}
-              </div>
-            </Bouton>
-            <Bouton
-              variant="secondaire"
-              onClick={() => setCurrentTab('reglages')}
-              className="flex flex-col items-start gap-3 w-full p-5 h-auto"
-            >
-              <span className="w-8 h-8 rounded-full bg-action-deep text-white flex items-center justify-center shrink-0 text-sm font-bold">
-                2
-              </span>
-              <div className="flex items-center gap-2 w-full">
-                <span className="text-base text-white font-medium">
-                  Ajouter ma clé API
-                </span>
-                {settings.cleApi !== '' && (
-                  <CheckCircle className="w-5 h-5 text-vert shrink-0 ml-auto" />
-                )}
-              </div>
-            </Bouton>
-            <Bouton
-              variant="secondaire"
-              onClick={() => setCurrentTab('offres')}
-              className="flex flex-col items-start gap-3 w-full p-5 h-auto"
-            >
-              <span className="w-8 h-8 rounded-full bg-action-deep text-white flex items-center justify-center shrink-0 text-sm font-bold">
-                3
-              </span>
-              <div className="flex items-center gap-2 w-full">
-                <span className="text-base text-white font-medium">
-                  Ajouter ma première offre
-                </span>
-                {offres.length > 0 && (
-                  <CheckCircle className="w-5 h-5 text-vert shrink-0 ml-auto" />
-                )}
-              </div>
-            </Bouton>
-          </div>
-        </motion.section>
-      )}
-
-      {/* ── Cartes statistiques ──────────────────────────── */}
-      {offres.length > 0 && (
-        <motion.div
-          variants={stagger.item}
-          className="grid grid-cols-2 lg:grid-cols-4 gap-5"
-        >
-          <Tuile
-            valeur={postulees + entretiens}
-            label="Candidatures envoyées"
-            icone={<Briefcase className="w-5 h-5 text-white" />}
-            accent="bg-gradient-to-br from-action to-action-vif"
-          />
-          <Tuile
-            valeur={entretiens}
-            label="Entretiens"
-            icone={<TrendingUp className="w-5 h-5 text-white" />}
-            accent="bg-gradient-to-br from-electric to-electric/70"
-          />
-          <Tuile
-            valeur={sauvegardees}
-            label="Offres sauvegardées"
-            icone={<Star className="w-5 h-5 text-white" />}
-            accent="bg-gradient-to-br from-rose to-rose/70"
-          />
-          <Tuile
-            valeur={`${pctProfil}%`}
-            label="Profil complété"
-            icone={<UserCheck className="w-5 h-5 text-white" />}
-            accent="bg-gradient-to-br from-vert to-vert/70"
-          />
-        </motion.div>
-      )}
-
-      {/* ── Contenu principal (offres existantes) ────────── */}
-      {offres.length > 0 && (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Offre en cours */}
-            <motion.div variants={stagger.item}>
-              <Carte
-                titre="Offre en cours"
-                icone={<Briefcase className="w-5 h-5 text-action" />}
-              >
-                {offreEnCours ? (
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3 p-4 rounded-xl bg-surface-3 border border-bordure shadow-sm">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-base font-medium text-white truncate">
-                          {offreEnCours.titre}
-                        </p>
-                        <p className="text-sm text-text-dim mt-0.5">
-                          {offreEnCours.entreprise}
-                        </p>
-                        {offreEnCours.dateAjout && (
-                          <p className="text-xs text-text-muted mt-1">
-                            Ajoutée il y a {joursDepuis(offreEnCours.dateAjout)} jours
-                          </p>
-                        )}
-                      </div>
-                      <StatutBadge statut={offreEnCours.statut} />
-                    </div>
-                    {offreEnCours.notes && (
-                      <p className="text-sm text-text bg-surface-3 rounded-xl p-3 border border-bordure">
-                        {offreEnCours.notes}
-                      </p>
-                    )}
-                    <Bouton
-                      variant="primaire"
-                      onClick={() => setCurrentTab('offres')}
-                      className="w-full"
-                    >
-                      Voir toutes mes offres
-                    </Bouton>
-                  </div>
-                ) : (
-                  <div className="text-center py-10">
-                    <div className="w-14 h-14 rounded-2xl bg-action/10 flex items-center justify-center mx-auto mb-4">
-                      <Briefcase className="w-7 h-7 text-action" />
-                    </div>
-                    <p className="text-base text-text">Aucune offre en cours.</p>
-                    <p className="text-sm text-text-muted mt-1">
-                      Ajoute une offre pour commencer.
-                    </p>
-                    <Bouton
-                      variant="primaire"
-                      onClick={() => setCurrentTab('offres')}
-                      className="mt-4"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      Ajouter une offre
-                    </Bouton>
-                  </div>
-                )}
-              </Carte>
-            </motion.div>
-
-            {/* Messages récents */}
-            <motion.div variants={stagger.item}>
-              <Carte
-                titre="Messages récents"
-                icone={<MessageCircle className="w-5 h-5 text-action" />}
-              >
-                {offresAvecLettre.length > 0 ? (
-                  <ul className="space-y-3">
-                    {offresAvecLettre.slice(0, 5).map((o) => (
-                      <li
-                        key={o.id}
-                        className="flex items-center gap-3 p-4 rounded-xl bg-surface-3 border border-bordure shadow-sm"
-                      >
-                        <div className="w-2.5 h-2.5 rounded-full bg-vert shadow-sm shadow-vert/30 flex-shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-base font-medium text-white truncate">
-                            {o.titre}
-                          </p>
-                          <p className="text-sm text-text-dim">{o.entreprise}</p>
-                        </div>
-                        <span className="text-xs text-text-muted shrink-0">
-                          {o.dateAjout ? joursDepuis(o.dateAjout) + 'j' : ''}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="text-center py-10">
-                    <div className="w-14 h-14 rounded-2xl bg-action/10 flex items-center justify-center mx-auto mb-4">
-                      <MessageCircle className="w-7 h-7 text-action" />
-                    </div>
-                    <p className="text-base text-text">Pas encore de messages.</p>
-                    <p className="text-sm text-text-muted mt-1">
-                      Configure ton email dans{' '}
-                      <button
-                        onClick={() => setCurrentTab('reglages')}
-                        className="text-action font-medium hover:underline"
-                      >
-                        Réglages
-                      </button>
-                      .
-                    </p>
-                  </div>
-                )}
-              </Carte>
-            </motion.div>
-
-            {/* Suggestions / offres récentes */}
-            <motion.div variants={stagger.item}>
-              <Carte
-                titre="Suggestions"
-                icone={<Sparkles className="w-5 h-5 text-action" />}
-              >
-                {offresTriees.length > 0 ? (
-                  <ul className="space-y-2">
-                    {offresTriees.slice(0, 5).map((o) => (
-                      <li
-                        key={o.id}
-                        className="flex items-center gap-3 p-3.5 rounded-xl bg-surface-3 border border-bordure shadow-sm"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-action/10 flex items-center justify-center shrink-0">
-                          <Briefcase className="w-4 h-4 text-action" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-base text-white truncate">
-                            {o.titre}
-                          </p>
-                          <p className="text-sm text-text-dim">
-                            {o.entreprise} · {o.dateAjout ? joursDepuis(o.dateAjout) + 'j' : ''}
-                          </p>
-                        </div>
-                        {!o.lettre && o.statut === 'a_postuler' && (
-                          <button
-                            onClick={() => setCurrentTab('postuler')}
-                            className="text-sm text-action font-semibold hover:underline shrink-0"
-                          >
-                            Postuler
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                    {offresTriees.length > 5 && (
-                      <button
-                        onClick={() => setCurrentTab('offres')}
-                        className="text-sm text-action font-medium hover:underline text-center w-full block mt-2"
-                      >
-                        Voir toutes les offres ({offres.length})
-                      </button>
-                    )}
-                  </ul>
-                ) : (
-                  <p className="text-base text-text-dim py-6 text-center">
-                    Aucune offre pour l'instant.
-                  </p>
-                )}
-              </Carte>
-            </motion.div>
-
-            {/* Prochaines actions / calendrier */}
-            <motion.div variants={stagger.item}>
-              <Carte
-                titre="Prochaines actions"
-                icone={<Calendar className="w-5 h-5 text-action" />}
-              >
-                {offresRecentes.length > 0 ? (
-                  <ul className="space-y-2">
-                    {offresRecentes.slice(0, 5).map((o) => (
-                      <li
-                        key={o.id}
-                        className="flex items-center gap-3 p-3.5 rounded-xl bg-surface-3 border border-bordure shadow-sm"
-                      >
-                        <Calendar className="w-4 h-4 text-text-muted flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-base text-white truncate">
-                            {o.titre}
-                          </p>
-                          <p className="text-sm text-text-dim">
-                            {o.entreprise} ·{' '}
-                            {o.dateAjout ? joursDepuis(o.dateAjout) + 'j' : ''}
-                          </p>
-                        </div>
-                        {!o.lettre && (
-                          <button
-                            onClick={() => setCurrentTab('postuler')}
-                            className="text-sm text-action font-semibold hover:underline shrink-0"
-                          >
-                            Postuler
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-base text-text-dim py-6 text-center">
-                    Rien de prévu aujourd'hui.
-                  </p>
-                )}
-              </Carte>
-            </motion.div>
-          </div>
-
-          {/* ── Actions rapides ────────────────────────────── */}
-          <motion.div
-            variants={stagger.item}
-            className="grid grid-cols-1 md:grid-cols-2 gap-5"
+      {/* Compteurs cliquables (filtrent l'onglet Offres) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        {compteurs.map((c) => (
+          <button
+            key={c.filtre}
+            onClick={() => ouvrirOffres(c.filtre)}
+            className="text-left rounded-2xl bg-surface-2 border border-bordure shadow-sm p-6 card-hover"
           >
-            <Bouton
-              onClick={() => setCurrentTab('offres')}
-              className="py-5 text-lg shadow-md shadow-action/20"
-            >
-              <PlusCircle className="w-6 h-6" />
-              Ajouter une offre
-            </Bouton>
-            <Bouton
-              variant="secondaire"
-              onClick={() => setCurrentTab('postuler')}
-              className="py-5 text-lg"
-            >
-              <FileEdit className="w-6 h-6" />
-              Générer une lettre
-            </Bouton>
-          </motion.div>
-
-          {/* ── Vue d'ensemble / récapitulatif ────────────── */}
-          <motion.div variants={stagger.item}>
-            <Carte
-              titre="Récapitulatif"
-              icone={<BarChart3 className="w-5 h-5 text-action" />}
-            >
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="rounded-xl bg-surface-3 border border-bordure p-4 text-center">
-                  <p className="text-2xl font-bold text-white">
-                    {offres.length}
-                  </p>
-                  <p className="text-xs text-text-dim mt-1">Total offres</p>
-                </div>
-                <div className="rounded-xl bg-surface-3 border border-bordure p-4 text-center">
-                  <p className="text-2xl font-bold text-electric">{postulees}</p>
-                  <p className="text-xs text-text-dim mt-1">Postulées</p>
-                </div>
-                <div className="rounded-xl bg-surface-3 border border-bordure p-4 text-center">
-                  <p className="text-2xl font-bold text-vert">{entretiens}</p>
-                  <p className="text-xs text-text-dim mt-1">Entretiens</p>
-                </div>
-                <div className="rounded-xl bg-surface-3 border border-bordure p-4 text-center">
-                  <p className="text-2xl font-bold text-rose">
-                    {offres.filter((o) => o.statut === 'refus').length}
-                  </p>
-                  <p className="text-xs text-text-dim mt-1">Refus</p>
-                </div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm bg-gradient-to-br ${c.accent}`}>
+                {c.icone}
               </div>
+              <p className="text-3xl font-bold text-white">{c.valeur}</p>
+            </div>
+            <p className="text-sm text-text-dim">{c.label}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Import des offres */}
+      <Carte titre={t('dashboard.import.title')} icone={<Mail className="w-5 h-5" />}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Bouton variant="secondaire" onClick={importerDepuisIMAP} disabled={importStatus === 'loading'} className="py-4 text-base">
+            {importStatus === 'loading' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+            {t('dashboard.import.fromMail')}
+          </Bouton>
+          <Bouton variant="secondaire" onClick={importerDepuisFT} disabled={importStatus === 'loading'} className="py-4 text-base">
+            <Building2 className="w-5 h-5" />
+            {t('dashboard.import.fromFT')}
+          </Bouton>
+          <Bouton variant="secondaire" onClick={importerEnLigne} disabled={importStatus === 'loading'} className="py-4 text-base">
+            <Globe className="w-5 h-5" />
+            Plateformes (Adzuna · Jooble · Reed)
+          </Bouton>
+        </div>
+
+        {importStatus !== 'idle' && (
+          <div
+            className={`mt-4 p-3 rounded-xl flex items-center gap-2 text-sm ${
+              importStatus === 'loading'
+                ? 'bg-electric/10 text-electric border border-electric/20'
+                : importStatus === 'ok'
+                ? 'bg-vert/10 text-vert border border-vert/20'
+                : 'bg-rose/10 text-rose border border-rose/20'
+            }`}
+          >
+            {importStatus === 'loading' && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
+            {importStatus === 'ok' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+            {importStatus === 'erreur' && <AlertCircle className="w-4 h-4 shrink-0" />}
+            <span>{importMessage}</span>
+          </div>
+        )}
+
+        {importStatus === 'idle' && !settings.imapHost && (
+          <p className="mt-3 text-xs text-text-muted text-center">
+            Configurez votre boîte mail et/ou France Travail dans l'onglet Paramètres.
+          </p>
+        )}
+      </Carte>
+
+      {/* Dernières offres : Boîte mail / France Travail */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Carte titre="Dernières — Boîte mail" icone={<Mail className="w-5 h-5" />}>
+          {renderListe(dernieresMail, 'Aucune offre importée par mail.')}
+          {dernieresMail.length > 0 && (
+            <button
+              onClick={() => ouvrirOffres('email')}
+              className="text-sm text-action font-medium hover:underline text-center w-full block mt-3"
+            >
+              Voir toutes les offres mail
+            </button>
+          )}
+        </Carte>
+
+        <Carte titre="Dernières — France Travail" icone={<Building2 className="w-5 h-5" />}>
+          {renderListe(dernieresFT, 'Aucune offre France Travail.')}
+          {dernieresFT.length > 0 && (
+            <button
+              onClick={() => ouvrirOffres('france-travail')}
+              className="text-sm text-action font-medium hover:underline text-center w-full block mt-3"
+            >
+              Voir toutes les offres France Travail
+            </button>
+          )}
+        </Carte>
+      </div>
+
+      {/* Une carte dédiée par plateforme — 100 dernières offres */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {famillesAffichees.map((fam) => {
+          const liste = trier(offresPlateforme.filter((o) => familleSource(o.source) === fam), 100)
+          return (
+            <Carte key={fam} titre={fam} icone={<Globe className="w-5 h-5" />}>
+              <p className="text-xs text-text-muted mb-2">
+                {liste.length > 0 ? `${liste.length} offre${liste.length > 1 ? 's' : ''}` : 'Non configurée / aucune offre'}
+              </p>
+              <div className="max-h-[420px] overflow-y-auto pr-1">
+                {renderListe(liste, 'Configure la clé dans Paramètres, puis lance une recherche.')}
+              </div>
+              {liste.length > 0 && (
+                <button
+                  onClick={() => ouvrirOffres(fam as CanalOffre)}
+                  className="text-sm text-action font-medium hover:underline text-center w-full block mt-3"
+                >
+                  Voir toutes les offres {fam}
+                </button>
+              )}
             </Carte>
-          </motion.div>
-        </>
-      )}
-    </motion.div>
+          )
+        })}
+      </div>
+    </div>
   )
 }

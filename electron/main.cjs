@@ -1,13 +1,41 @@
-const { app, BrowserWindow, ipcMain, clipboard, session, dialog, safeStorage } = require('electron')
+// Garde anti-ELECTRON_RUN_AS_NODE : si cette variable est héritée de l'environnement
+// (VS Code, terminal Hermes...), Electron démarre en Node pur et l'app crashe au lancement
+// Garde anti-ELECTRON_RUN_AS_NODE...
+if (process.env.ELECTRON_RUN_AS_NODE) {
+  try {
+    const { spawnSync } = require('child_process')
+    const electronBin = require('electron')
+    const cleanEnv = { ...process.env }
+    delete cleanEnv.ELECTRON_RUN_AS_NODE
+    const appDir = require('path').join(__dirname, '..')
+    const result = spawnSync(electronBin, [appDir], { env: cleanEnv, stdio: 'inherit' })
+    process.exit(result.status ?? 0)
+  } catch { process.exit(1) }
+}
+
+// ── Piège à exceptions non rattrapées ──────────────────────────────────
+// Évite qu'une erreur asynchrone (ex : timeout IMAP) ne fasse crasher l'app.
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err.message, err.stack?.split('\n').slice(0, 3).join('\n'))
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason)
+})
+
+const { app, BrowserWindow, ipcMain, session, safeStorage, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const net = require('net')
 const tls = require('tls')
+const { ImapFlow } = require('imapflow')
 
 let mainWindow = null
 
-// CSP
-const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.deepseek.com https://api.groq.com https://api.openai.com https://api.francetravail.io https://entreprise.francetravail.fr; img-src 'self' data:; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+// CSP — stricte en production (exe packagé). En dev, Vite + React-Refresh injectent un
+// script inline (préambule) + HMR (eval, websocket) : sans assouplissement, la CSP bloque
+// le préambule -> "@vitejs/plugin-react can't detect preamble" -> écran blanc.
+const CSP_PROD = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.deepseek.com https://api.groq.com https://api.openai.com https://api.francetravail.io https://entreprise.francetravail.fr; img-src 'self' data:; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+const CSP_DEV = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:5173 http://localhost:5173 https://api.deepseek.com https://api.groq.com https://api.openai.com https://api.francetravail.io https://entreprise.francetravail.fr; img-src 'self' data:; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
 
 // ===== VALIDATION =====
 // Validation centralisée des payloads IPC pour éviter les données invalides accidentelles ou malveillantes.
@@ -38,7 +66,6 @@ function createWindow() {
     minHeight: 640,
     resizable: true,
     title: 'GoJob',
-    icon: path.join(__dirname, '../build/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -48,7 +75,8 @@ function createWindow() {
   })
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [CSP] } })
+    const csp = app.isPackaged ? CSP_PROD : CSP_DEV
+    callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
   })
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -81,34 +109,9 @@ app.on('activate', () => { if (mainWindow === null) createWindow() })
 
 const SECRETS_FILE = path.join(app.getPath('userData'), 'gojob-secrets.enc')
 
-ipcMain.handle('safe-chiffrer', async (_event, plaintext) => {
-  const err = validatePayload({ plaintext }, { plaintext: 'required-string' })
-  if (err) return err
-  if (!safeStorage.isEncryptionAvailable()) {
-    return Buffer.from(plaintext).toString('base64')
-  }
-  const encrypted = safeStorage.encryptString(plaintext)
-  return encrypted.toString('base64')
-})
-
-ipcMain.handle('safe-dechiffrer', async (_event, encryptedB64) => {
-  const err = validatePayload({ encryptedB64 }, { encryptedB64: 'required-string' })
-  if (err) return err
-  if (!safeStorage.isEncryptionAvailable()) {
-    return Buffer.from(encryptedB64, 'base64').toString('utf-8')
-  }
-  const encrypted = Buffer.from(encryptedB64, 'base64')
-  return safeStorage.decryptString(encrypted)
-})
-
 // Persistance des secrets: sauvegarde d'un objet { cleApi, franceTravailClientId, franceTravailClientSecret, imap }
 ipcMain.handle('sauvegarder-secrets', async (_event, secrets) => {
-  // Ne sauvegarder que si au moins une clé API est fournie (évite d'écraser avec des valeurs vides)
   if (!secrets || typeof secrets !== 'object') return { ok: false, erreur: 'Données invalides.' }
-  // Si cleApi est vide, on ne sauvegarde pas (protection contre l'écrasement accidentel)
-  if (secrets.cleApi !== undefined && secrets.cleApi !== null && typeof secrets.cleApi === 'string' && secrets.cleApi.trim() === '') {
-    return { ok: true, ignore: 'cleApi vide : non sauvegardé.' }
-  }
   const json = JSON.stringify(secrets)
   if (safeStorage.isEncryptionAvailable()) {
     fs.writeFileSync(SECRETS_FILE, safeStorage.encryptString(json))
@@ -134,165 +137,6 @@ ipcMain.handle('charger-secrets', async () => {
   }
 })
 
-// ===== PRESSE-PAPIER =====
-ipcMain.handle('copier-presse-papier', (_event, texte) => {
-  const err = validatePayload({ texte }, { texte: 'required-string' })
-  if (err) return err
-  clipboard.writeText(texte)
-  return { ok: true }
-})
-
-// ===== IMPORT CV =====
-ipcMain.handle('importer-cv', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Importer un CV',
-    filters: [
-      { name: 'CV', extensions: ['pdf', 'docx', 'doc', 'txt', 'md'] },
-    ],
-    properties: ['openFile'],
-  })
-  if (result.canceled || result.filePaths.length === 0) {
-    return { ok: false, erreur: 'Aucun fichier sélectionné.' }
-  }
-
-  const filePath = result.filePaths[0]
-  const ext = path.extname(filePath).toLowerCase()
-  const fileName = path.basename(filePath)
-  let texte = ''
-
-  try {
-    if (ext === '.txt' || ext === '.md') {
-      texte = fs.readFileSync(filePath, 'utf-8')
-    } else if (ext === '.pdf') {
-      const buf = fs.readFileSync(filePath)
-      texte = buf.toString('utf-8')
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-      if (texte.length < 50) {
-        texte = '[Le PDF semble contenir peu de texte exploitable. Essaye de copier-coller le contenu directement.]'
-      }
-    } else if (ext === '.docx' || ext === '.doc') {
-      try {
-        const zipBuffer = fs.readFileSync(filePath)
-        const textContent = zipBuffer.toString('utf-8')
-        const matches = textContent.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || []
-        texte = matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ').trim()
-      } catch {
-        texte = '[Impossible d\'extraire le texte du fichier Word. Copie-colle le contenu manuellement.]'
-      }
-    } else {
-      return { ok: false, erreur: `Format non supporté : ${ext}` }
-    }
-
-    if (!texte || texte.length < 20) {
-      return { ok: false, erreur: 'Fichier vide ou illisible.' }
-    }
-
-    return { ok: true, texte, nom: fileName, chemin: filePath }
-  } catch (err) {
-    return { ok: false, erreur: `Erreur de lecture : ${err.message}` }
-  }
-})
-
-// ===== GÉNÉRATION LETTRE (dans main process = pas de CORS) =====
-// Prompt partagé — utilisé aussi dans le fallback web (src/utils/prompt.ts)
-function buildSystemPrompt(titreMetier, langue) {
-  const intitule = titreMetier || 'le métier visé'
-  const langage = langue === 'es' ? 'espagnol (Amérique latine)' : 'français'
-  return `Tu es un assistant spécialisé dans la rédaction de lettres de motivation pour ${intitule}.
-
-Règles :
-- Lettre personnalisée : adapte chaque phrase à l'offre spécifique et au profil réel du candidat.
-- Naturelle en ${langage} : phrasé varié, ton humain et professionnel. Évite les formules génériques.
-- Incorpore naturellement les mots-clés et compétences de l'offre pour passer les filtres ATS.
-- N'invente jamais d'expériences, compétences ou diplômes absents du profil.
-- Format : 200-250 mots, 3 paragraphes — accroche, corps, conclusion.
-- Langue : ${langage} sauf si l'offre est dans une autre langue.
-- Signature : "Cordialement, [Prénom]"
-- Relis-toi : vérifie la cohérence entre ce que tu écris et le profil.`
-}
-
-function buildUserPrompt(offre, nom, intitule, competences, cvText) {
-  return `Offre : ${offre.titre} chez ${offre.entreprise}
-Description : ${offre.description || 'Non fournie'}
-Source : ${offre.source}
-
-Profil du candidat :
-- Nom : ${nom || 'Candidat'}
-- Titre : ${intitule}
-- Compétences : ${competences.join(', ')}
-- CV : ${cvText || 'Non fourni'}
-
-Génère une lettre de motivation adaptée à cette offre.`
-}
-
-ipcMain.handle('generer-lettre', async (_event, { offre, cvText, competences, nom, endpoint, modele, cleApi, titreMetier, langue }) => {
-  const err = validatePayload({ cleApi, offre, cvText }, { cleApi: 'required-string', offre: 'required-string', cvText: 'optional-string' })
-  if (err) return err
-  if (!offre || !offre.titre) return { ok: false, erreur: 'Offre incomplète (titre requis).' }
-
-  const intitule = titreMetier || 'le métier visé'
-  const langage = langue === 'es' ? 'espagnol (Amérique latine)' : 'français'
-
-  const systemPrompt = buildSystemPrompt(titreMetier, langue)
-  const userPrompt = buildUserPrompt(typeof offre === 'string' ? JSON.parse(offre) : offre, nom, intitule, competences || [], cvText || '')
-
-  const payload = {
-    model: modele || 'deepseek-chat',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-    max_tokens: 1024,
-    temperature: 0.7,
-  }
-
-  try {
-    const baseUrl = (endpoint || 'https://api.deepseek.com/v1').replace(/\/+$/, '')
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cleApi}` },
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
-      let erreur
-      if (res.status === 401) erreur = 'Clé API invalide pour ' + (endpoint || 'DeepSeek') + '. Vérifie ta clé dans les réglages.'
-      else if (res.status === 429) erreur = 'Trop de requêtes vers ' + (endpoint || 'DeepSeek') + '. Attends un moment et réessaie.'
-      else if (res.status >= 500) erreur = 'Le service ' + (endpoint || 'DeepSeek') + ' est indisponible. Réessaie plus tard.'
-      else erreur = `API error ${res.status}: ${errBody}`
-      throw new Error(erreur)
-    }
-    const data = await res.json()
-    return { ok: true, contenu: data?.choices?.[0]?.message?.content || 'Erreur de génération.' }
-  } catch (err) {
-    return { ok: false, erreur: err.message }
-  }
-})
-
-// ===== TEST CLÉ API =====
-ipcMain.handle('tester-cle', async (_event, { endpoint, modele, cleApi }) => {
-  const err = validatePayload({ cleApi }, { cleApi: 'required-string' })
-  if (err) return err
-  try {
-    const baseUrl = (endpoint || 'https://api.deepseek.com/v1').replace(/\/+$/, '')
-    const res = await fetch(`${baseUrl}/models`, {
-      headers: { Authorization: `Bearer ${cleApi}` },
-    })
-    if (res.ok) return { ok: true }
-    const errBody = await res.text().catch(() => '')
-    let erreur
-    if (res.status === 401) erreur = 'Clé API invalide.'
-    else if (res.status === 429) erreur = 'Trop de requêtes. Attends un moment.'
-    else if (res.status >= 500) erreur = 'Service indisponible.'
-    else erreur = `Erreur ${res.status}: ${errBody}`
-    return { ok: false, erreur }
-  } catch (err) {
-    return { ok: false, erreur: err.message }
-  }
-})
-
 // ===== FRANCE TRAVAIL =====
 let franceTravailToken = null
 let franceTravailTokenExpires = 0
@@ -300,9 +144,13 @@ let franceTravailTokenExpires = 0
 ipcMain.handle('france-travail-connect', async (_event, { clientId, clientSecret, scope }) => {
   const err = validatePayload({ clientId, clientSecret }, { clientId: 'required-string', clientSecret: 'required-string' })
   if (err) return err
+  // Nettoyage : un copier-coller depuis le portail France Travail ajoute souvent un espace
+  // ou un retour-ligne → OAuth renvoie alors « invalid_client ». On retire ces blancs.
+  clientId = (clientId || '').trim()
+  clientSecret = (clientSecret || '').trim()
   try {
-    const scopeFinal = scope || 'api_offresdemploiv2'
-    const res = await fetch('https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=partenaire', {
+    const scopeFinal = scope || 'api_offresdemploiv2 o2dsoffre'
+    const res = await fetch('https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -312,8 +160,14 @@ ipcMain.handle('france-travail-connect', async (_event, { clientId, clientSecret
         scope: scopeFinal,
       }),
     })
-    if (!res.ok) throw new Error(`OAuth error ${res.status}`)
-    const data = await res.json()
+    const body = await res.text()
+    if (!res.ok) {
+      if (body.includes('invalid_client')) {
+        throw new Error('Identifiants France Travail refusés (invalid_client). Vérifie le Client ID et le Client Secret : ils doivent provenir de la même application France Travail (avec l\'API « Offres d\'emploi v2 » activée), sans espace ni caractère manquant.')
+      }
+      throw new Error(`OAuth error ${res.status} — ${body}`)
+    }
+    const data = JSON.parse(body)
     franceTravailToken = data.access_token
     franceTravailTokenExpires = Date.now() + (data.expires_in || 3600) * 1000
     return { ok: true }
@@ -329,15 +183,80 @@ ipcMain.handle('france-travail-offres', async (_event, { motsCles, localisation 
     if (!franceTravailToken || Date.now() > franceTravailTokenExpires) {
       return { ok: false, erreur: 'Non connecté à France Travail. Reconfigure tes identifiants.' }
     }
-    const params = new URLSearchParams({ range: '0-49', sort: 'dateCreation' })
-    if (motsCles) params.set('motsCles', motsCles)
-    if (localisation) params.set('commune', localisation)
 
-    const res = await fetch(`https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?${params}`, {
-      headers: { Authorization: `Bearer ${franceTravailToken}`, Accept: 'application/json' },
-    })
-    if (!res.ok) throw new Error(`API error ${res.status}`)
-    const data = await res.json()
+    // Logs console uniquement (jamais d'écriture fichier : illisible dans l'app packagée/asar).
+    const log = (...args) => console.log('[FT]', ...args)
+    log('recherche France Travail')
+
+    // Résoudre localisation → code département
+    let locCode = ''
+    log('🔍 FT search - localisation reçue:', localisation)
+    if (localisation && localisation.trim()) {
+      const loc = localisation.trim()
+      log('🔍 FT search - loc trim:', loc)
+      if (/^\d{2,3}$/.test(loc)) {
+        // Déjà un code département
+        locCode = loc
+        log('🔍 FT search - code département fourni:', locCode)
+      } else if (/^\d{5}$/.test(loc)) {
+        // Code INSEE → extraire les 2 premiers chiffres (département)
+        locCode = loc.slice(0, 2)
+        log('🔍 FT search - code INSEE → département:', locCode)
+      } else {
+        // Tentative de résolution via geo.api.gouv.fr → on demande le département
+        try {
+          log('🔍 FT search - appel geo API pour:', loc)
+          const geoRes = await fetch(
+            `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(loc)}&fields=code,codeDepartement&boost=population&limit=1`
+          )
+          log('🔍 FT search - geoRes status:', geoRes.status)
+          if (geoRes.ok) {
+            const geoData = await geoRes.json()
+            log('🔍 FT search - geoData:', JSON.stringify(geoData))
+            if (geoData.length > 0) {
+              // Priorité au code département
+              locCode = geoData[0].codeDepartement || geoData[0].code.slice(0, 2)
+              log('🔍 FT search - département trouvé:', locCode)
+            }
+          } else {
+            log('🔍 FT search - geo pas ok')
+          }
+        } catch (e) {
+          log('🔍 FT search - geo exception:', e.message)
+        }
+      }
+    }
+    log('🔍 FT search - code localisation final:', locCode)
+
+    // Construire les paramètres GET
+    const params = new URLSearchParams()
+    if (motsCles) params.set('motsCles', motsCles)
+    
+    // Filtre localisation
+    if (locCode) {
+      if (/^\d{5}$/.test(locCode)) {
+        params.set('commune', locCode)
+        params.set('rayon', '10')
+      } else {
+        params.set('departement', locCode)
+      }
+    }
+
+    log('🔍 FT search - URL:', `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?${params}`)
+    log('🔍 FT search - token begins:', franceTravailToken.slice(0, 10) + '...')
+
+    const res = await fetch(
+      `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?${params}`,
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${franceTravailToken}`, Accept: 'application/json' },
+      }
+    )
+    const jsonBody = await res.text()
+    log('🔍 FT search - res status:', res.status)
+    log('🔍 FT search - res body:', jsonBody)
+    if (!res.ok) throw new Error(`API error ${res.status} — ${jsonBody}`)
+    const data = JSON.parse(jsonBody)
     return {
       ok: true,
       offres: (data.resultats || []).map(o => ({
@@ -345,15 +264,140 @@ ipcMain.handle('france-travail-offres', async (_event, { motsCles, localisation 
         titre: o.intitule || o.appellationCourt || 'Offre sans titre',
         entreprise: o.entreprise?.nom || o.contact?.nom || 'Entreprise non précisée',
         description: o.description || '',
-        url: o.url ?? o.origineOffre?.urlReponse ?? '',
+        url: o.url ?? o.origineOffre?.urlReponse ?? (o.id ? `https://candidat.francetravail.fr/offres/recherche/detail/${o.id}` : ''),
         source: 'France Travail',
-        statut: 'a_postuler',
         dateAjout: new Date().toISOString(),
         ville: o.lieuTravail?.libelle || '',
+        typeContrat: (o.typeContrat || '').toLowerCase() || undefined,
+        remote: o.origineOffre?.teletravailPossible === true || false,
       })),
     }
   } catch (err) {
     return { ok: false, erreur: err.message }
+  }
+})
+
+// ===== RECHERCHE EN LIGNE — connecteurs plateformes (API) =====
+// Chaque connecteur renvoie des offres normalisées (clé gratuite requise par plateforme).
+
+function offreEnLigne(o) {
+  return {
+    id: o.id,
+    titre: o.titre || 'Offre',
+    entreprise: o.entreprise || '',
+    description: (o.description || '').slice(0, 2000),
+    url: o.url || '',
+    source: o.source,
+    dateAjout: new Date().toISOString(),
+    ville: o.ville || '',
+    typeContrat: o.typeContrat || '',
+    remote: !!o.remote,
+    tags: o.tags || [],
+  }
+}
+
+// --- Adzuna (FR/UK/ES/DE) ---
+const ADZUNA_PAYS = { fr: 'FR', gb: 'UK', es: 'ES', de: 'DE' }
+async function fetchAdzuna(appId, appKey, requete, localisation, pays) {
+  appId = (appId || '').trim(); appKey = (appKey || '').trim()
+  const params = new URLSearchParams({ app_id: appId, app_key: appKey, results_per_page: '50', what: requete, 'content-type': 'application/json' })
+  if (localisation) params.set('where', localisation)
+  const res = await fetch(`https://api.adzuna.com/v1/api/jobs/${pays}/search/1?${params}`)
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) throw new Error('Clés Adzuna invalides.')
+    throw new Error(`Adzuna ${ADZUNA_PAYS[pays] || pays} : erreur ${res.status}`)
+  }
+  const data = await res.json()
+  const label = ADZUNA_PAYS[pays] || pays.toUpperCase()
+  return (data.results || []).map((o) => offreEnLigne({
+    id: `adzuna-${o.id}`, titre: o.title, entreprise: o.company?.display_name || '',
+    description: o.description || '', url: o.redirect_url || '', source: `Adzuna ${label}`,
+    ville: o.location?.display_name || '', typeContrat: o.contract_type === 'permanent' ? 'cdi' : o.contract_type === 'contract' ? 'cdd' : '',
+    remote: /remote|t[ée]l[ée]travail/i.test((o.title || '') + (o.description || '')),
+  }))
+}
+
+// --- Jooble (agrégateur multi-pays) ---
+async function fetchJooble(key, requete, localisation) {
+  key = (key || '').trim()
+  const res = await fetch(`https://jooble.org/api/${key}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keywords: requete, location: localisation || '' }),
+  })
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) throw new Error('Clé Jooble invalide.')
+    throw new Error(`Jooble : erreur ${res.status}`)
+  }
+  const data = await res.json()
+  return (data.jobs || []).slice(0, 50).map((j, i) => offreEnLigne({
+    id: `jooble-${j.id || i}-${Date.now()}`, titre: j.title, entreprise: j.company || '',
+    description: (j.snippet || '').replace(/<[^>]+>/g, ' '), url: j.link || '', source: 'Jooble',
+    ville: j.location || '', remote: /remote|t[ée]l[ée]travail/i.test((j.title || '') + (j.snippet || '')),
+  }))
+}
+
+// --- Reed (UK) ---
+async function fetchReed(key, requete, localisation) {
+  key = (key || '').trim()
+  const params = new URLSearchParams({ keywords: requete, resultsToTake: '50' })
+  if (localisation) params.set('locationName', localisation)
+  const auth = Buffer.from(`${key}:`).toString('base64')
+  const res = await fetch(`https://www.reed.co.uk/api/1.0/search?${params}`, { headers: { Authorization: `Basic ${auth}` } })
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Clé Reed invalide.')
+    throw new Error(`Reed : erreur ${res.status}`)
+  }
+  const data = await res.json()
+  return (data.results || []).map((r) => offreEnLigne({
+    id: `reed-${r.jobId}`, titre: r.jobTitle, entreprise: r.employerName || '',
+    description: r.jobDescription || '', url: r.jobUrl || '', source: 'Reed UK', ville: r.locationName || '',
+  }))
+}
+
+ipcMain.handle('chercher-en-ligne', async (_event, cfg) => {
+  const { motsCles, localisation, adzunaAppId, adzunaAppKey, joobleKey, reedKey } = cfg || {}
+  const requete = (motsCles || '').trim() || 'architecte'
+  const offres = []
+  const erreurs = []
+
+  const lancer = async (fn) => {
+    try { offres.push(...await fn()) } catch (e) { erreurs.push(e.message || 'Erreur connecteur') }
+  }
+
+  const taches = []
+  if (adzunaAppId && adzunaAppKey) {
+    for (const p of ['fr', 'gb', 'es', 'de']) {
+      taches.push(lancer(() => fetchAdzuna(adzunaAppId, adzunaAppKey, requete, p === 'fr' ? localisation : '', p)))
+    }
+  }
+  if (joobleKey) taches.push(lancer(() => fetchJooble(joobleKey, requete, localisation)))
+  if (reedKey) taches.push(lancer(() => fetchReed(reedKey, requete, localisation)))
+
+  await Promise.all(taches)
+  return { ok: true, offres, erreurs, total: offres.length }
+})
+
+// Teste la clé d'une plateforme : lance une requête réelle ('architect') et renvoie le nombre d'offres.
+// Une clé invalide fait remonter l'erreur du connecteur (401/403 → « Clé … invalide »).
+ipcMain.handle('tester-cle', async (_event, cfg) => {
+  const { plateforme, adzunaAppId, adzunaAppKey, joobleKey, reedKey } = cfg || {}
+  try {
+    let offres = []
+    if (plateforme === 'adzuna') {
+      if (!adzunaAppId || !adzunaAppKey) return { ok: false, erreur: 'Renseigne App ID et App Key.' }
+      offres = await fetchAdzuna(adzunaAppId, adzunaAppKey, 'architect', '', 'gb')
+    } else if (plateforme === 'jooble') {
+      if (!joobleKey) return { ok: false, erreur: 'Renseigne la clé Jooble.' }
+      offres = await fetchJooble(joobleKey, 'architect', '')
+    } else if (plateforme === 'reed') {
+      if (!reedKey) return { ok: false, erreur: 'Renseigne la clé Reed.' }
+      offres = await fetchReed(reedKey, 'architect', '')
+    } else {
+      return { ok: false, erreur: 'Plateforme inconnue.' }
+    }
+    return { ok: true, count: offres.length }
+  } catch (e) {
+    return { ok: false, erreur: e.message || 'Erreur de connexion' }
   }
 })
 
@@ -371,27 +415,34 @@ function escapeIMAP(str) {
 ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsEnabled }) => {
   const err = validatePayload({ host, user, password }, { host: 'required-string', user: 'required-string', password: 'required-string' })
   if (err) return err
+  host = host.trim()
+  const portNum = port || 993
+  // Port 993 = TLS implicite TOUJOURS. Port 143 = STARTTLS. Autres ports = selon la case TLS.
+  const useTls = portNum === 143 ? false : (tlsEnabled !== false)
+
   return new Promise((resolve) => {
-    let timeout
     let buffer = ''
     let authenticated = false
-    let step = 0 // 0=connect, 1=greeting, 2=LOGIN or STARTTLS, 3=waiting for TLS secure, 4=LOGIN after TLS, 5=LIST
+    let settled = false
+    let step = 0 // 0=greeting, 2=STARTTLS envoyé, 3=upgrade TLS, 4/5=LOGIN, 6=LIST
     let sock = null
     let tag = 1
 
     const tagStr = () => `A${String(tag++).padStart(3, '0')}`
-    const cleanup = () => {
+    const finish = (result) => {
+      if (settled) return
+      settled = true
       clearTimeout(timeout)
       if (sock && !sock.destroyed) sock.destroy()
+      resolve(result)
     }
-    const send = (cmd) => {
-      if (sock && !sock.destroyed) sock.write(cmd + '\r\n')
-    }
+    const send = (cmd) => { if (sock && !sock.destroyed) sock.write(cmd + '\r\n') }
     // Le mot de passe n'est JAMAIS envoyé avant la négociation TLS.
-    // Si STARTTLS est refusé → erreur : utiliser le port 993 (TLS direct).
-    const doLogin = () => {
-      send(`${tagStr()} LOGIN "${escapeIMAP(user)}" "${escapeIMAP(password)}"`)
-    }
+    const doLogin = () => send(`${tagStr()} LOGIN "${escapeIMAP(user)}" "${escapeIMAP(password)}"`)
+
+    const timeout = setTimeout(() => {
+      finish({ ok: false, erreur: `Pas de réponse de ${host}:${portNum} (15s). Vérifie l'hôte/port et que TLS correspond (993 = TLS coché, 143 = décoché).` })
+    }, 15000)
 
     const onData = (data) => {
       buffer += data.toString()
@@ -401,8 +452,8 @@ ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsE
       for (const line of lines) {
         if (step === 0 && line.startsWith('* OK')) {
           step = 1
-          if (tlsEnabled) {
-            // TLS implicite (port 993) : déjà chiffré au niveau TCP
+          if (useTls) {
+            // TLS implicite (port 993) : déjà chiffré, on s'authentifie directement
             doLogin()
             step = 5
           } else {
@@ -410,142 +461,259 @@ ipcMain.handle('imap-connect', async (_event, { host, port, user, password, tlsE
             send(`${tagStr()} STARTTLS`)
             step = 2
           }
-        } else if (step === 2 && line.match(/^A\d{3} OK STARTTLS/i)) {
+        } else if (step === 2 && line.match(/^A\d{3} OK/i)) {
           // STARTTLS accepté → upgrade la socket (pas de LOGIN avant secureConnect)
           step = 3
           const rawSocket = sock
           sock = tls.connect({ socket: rawSocket, host, servername: host, rejectUnauthorized: true })
           sock.on('secureConnect', () => {
-            // Détacher l'ancien onData de la socket brute
             rawSocket.removeListener('data', onData)
-            // Attacher le onData sur la socket TLS
             sock.on('data', onData)
             doLogin()
             step = 4
           })
-          sock.on('error', (err) => {
-            cleanup()
-            resolve({ ok: false, erreur: 'Erreur TLS : ' + err.message })
-          })
-        } else if (step === 2 && line.match(/^A\d{3} (BAD|NO)/i) && !tlsEnabled) {
+          sock.on('error', (e) => finish({ ok: false, erreur: 'Erreur TLS : ' + e.message }))
+        } else if (step === 2 && line.match(/^A\d{3} (BAD|NO)/i)) {
           // STARTTLS refusé → on n'envoie JAMAIS LOGIN en clair
-          cleanup()
-          resolve({ ok: false, erreur: 'STARTTLS refusé par le serveur. Utilise le port 993 (TLS direct).' })
-        } else if ((step === 4 || step === 5) && line.match(/^A\d{3} OK LOGIN/i)) {
+          finish({ ok: false, erreur: 'STARTTLS refusé par le serveur. Utilise le port 993 (TLS direct).' })
+        } else if ((step === 4 || step === 5) && line.match(/^A\d{3} OK/i)) {
+          // Réponse de succès au LOGIN (Gmail renvoie "OK ... authenticated", sans le mot LOGIN)
           authenticated = true
           send(`${tagStr()} LIST "" "*"`)
           step = 6
-        } else if (step === 6 && line.match(/^A\d{3} OK LIST/i)) {
-          cleanup()
-          resolve({ ok: true, message: 'Connecté à ' + host + ' (IMAP' + (tlsEnabled ? ' TLS' : '') + ')' })
-        } else if (line.match(/^A\d{3} NO/i) || line.match(/^A\d{3} BAD/i)) {
-          cleanup()
-          const errPart = line.replace(/^A\d{3} (NO|BAD)\s*/i, '')
-          resolve({ ok: false, erreur: 'IMAP ' + (errPart || "erreur d'authentification") })
+        } else if (step === 6 && line.match(/^A\d{3} OK/i)) {
+          finish({ ok: true, message: `Connecté à ${host} (IMAP${useTls ? ' TLS' : ''})` })
+        } else if (line.match(/^A\d{3} (NO|BAD)/i)) {
+          const errPart = line.replace(/^A\d{3} (NO|BAD)\s*/i, '').trim()
+          finish({ ok: false, erreur: 'IMAP : ' + (errPart || "échec d'authentification — pour Gmail, utilise un mot de passe d'application") })
         } else if (line.startsWith('* BYE')) {
-          cleanup()
-          resolve({ ok: false, erreur: 'Connexion fermée par le serveur' })
+          finish({ ok: false, erreur: 'Connexion fermée par le serveur' })
         }
       }
     }
 
-    timeout = setTimeout(() => {
-      cleanup()
-      resolve({ ok: false, erreur: "Délai d'attente IMAP dépassé (30s)" })
-    }, 30000)
-
-    if (tlsEnabled) {
-      sock = tls.connect({ host, port: port || 993, servername: host, rejectUnauthorized: true })
+    if (useTls) {
+      sock = tls.connect({ host, port: portNum, servername: host, rejectUnauthorized: true })
     } else {
       sock = new net.Socket()
-      sock.connect(port || 143, host || 'localhost')
+      sock.connect(portNum, host)
     }
 
     sock.on('data', onData)
-    sock.on('error', (err) => {
-      cleanup()
-      resolve({ ok: false, erreur: 'Erreur IMAP : ' + err.message })
-    })
-    sock.on('close', () => {
-      if (!authenticated) {
-        cleanup()
-        resolve({ ok: false, erreur: 'Connexion fermée avant authentification' })
-      }
-    })
+    sock.on('error', (e) => finish({ ok: false, erreur: 'Erreur IMAP : ' + e.message }))
+    sock.on('close', () => { if (!authenticated) finish({ ok: false, erreur: 'Connexion fermée avant authentification' }) })
   })
 })
 
-// ===== IMPORT OFFRE PAR LIEN =====
-ipcMain.handle('detecter-source', async (_event, url) => {
-  const err = validatePayload({ url }, { url: 'required-string' })
+// ===== IMAP FETCH (imapflow) =====
+// Récupère les emails des 30 derniers jours provenant des plateformes d'emploi
+// connues (ALERT_SENDERS) et extrait les offres (titre + lien) depuis le HTML.
+ipcMain.handle('imap-fetch-recent', async (_event, { host, port, user, password, tlsEnabled, maxEmails }) => {
+  const err = validatePayload({ host, user, password }, { host: 'required-string', user: 'required-string', password: 'required-string' })
   if (err) return err
-  const urlLower = url.toLowerCase()
-
-  const sources = [
-    { domaine: 'hello-work.com', nom: 'HelloWork', freelance: false },
-    { domaine: 'hellowork.com', nom: 'HelloWork', freelance: false },
-    { domaine: 'meteojob.com', nom: 'Meteojob', freelance: false },
-    { domaine: 'france-travail', nom: 'France Travail', freelance: false },
-    { domaine: 'francetravail', nom: 'France Travail', freelance: false },
-    { domaine: 'comet.co', nom: 'Comet', freelance: true },
-    { domaine: 'cremedelacreme.io', nom: 'Crème de la Crème', freelance: true },
-    { domaine: 'freelancerepublik.com', nom: 'FreelanceRepublik', freelance: true },
-    { domaine: 'fiverr.com', nom: 'Fiverr', freelance: true },
-    { domaine: 'upwork.com', nom: 'Upwork', freelance: true },
-    { domaine: 'toptal.com', nom: 'Toptal', freelance: true },
-    { domaine: 'linkedin.com', nom: 'LinkedIn', freelance: false },
-    { domaine: 'indeed', nom: 'Indeed', freelance: false },
-    { domaine: 'wttj', nom: 'Welcome to the Jungle', freelance: false },
-    { domaine: 'welcometothejungle', nom: 'Welcome to the Jungle', freelance: false },
-    { domaine: 'leboncoin', nom: 'Leboncoin', freelance: false },
-    { domaine: 'apec', nom: 'APEC', freelance: false },
-    { domaine: 'monster', nom: 'Monster', freelance: false },
-    { domaine: 'regionsjob', nom: 'RegionsJob', freelance: false },
-    { domaine: 'jobijoba', nom: 'Jobijoba', freelance: false },
-    { domaine: 'optioncarriere', nom: 'Option Carrière', freelance: false },
-  ]
-
-  for (const s of sources) {
-    if (urlLower.includes(s.domaine)) {
-      return { source: s.nom, freelance: s.freelance, detection: 'domaine' }
-    }
-  }
-
-  return { source: 'Manuel', freelance: false, detection: 'inconnu' }
-})
-
-// ===== EXPORT — ne JAMAIS contenir les secrets =====
-ipcMain.handle('exporter-donnees', async (_event, donnees) => {
-  const err = validatePayload({ donnees }, { donnees: 'optional-string' })
-  if (err) return err
-  // On filtre les secrets avant export
-  const clean = {
-    profile: donnees.profile || {},
-    offres: donnees.offres || [],
-    documents: donnees.documents || [],
-    settings: {
-      endpoint: donnees.settings?.endpoint || '',
-      modele: donnees.settings?.modele || '',
-      langue: donnees.settings?.langue || 'fr',
-      // PAS de cleApi, franceTravailClientId, franceTravailClientSecret, imap
-    },
-    exportDate: new Date().toISOString(),
-    appVersion: app.getVersion(),
-  }
+  host = host.trim()
+  const portNum = port || 993
+  // Port 993 = TLS implicite TOUJOURS. Port 143 = STARTTLS (secure:false). Autres = selon la case.
+  const useTls = portNum === 143 ? false : (tlsEnabled !== false)
+  const limit = maxEmails && maxEmails > 50 ? maxEmails : 150
 
   try {
-    const defaultPath = path.join(app.getPath('documents'), `gojob-export-${Date.now()}.json`)
-    const result = await dialog.showSaveDialog(mainWindow, {
-      title: 'Exporter les données GoJob',
-      defaultPath,
-      filters: [{ name: 'JSON', extensions: ['json'] }],
+    const client = new ImapFlow({
+      host,
+      port: portNum,
+      secure: useTls,
+      auth: { user, pass: password },
+      logger: false,
     })
-    if (result.canceled || !result.filePath) {
-      return { ok: false, erreur: 'Export annulé.' }
+    client.on('error', (err) => {
+      console.error('[IMAP] Erreur client:', err.message)
+    })
+    client.on('close', () => {
+      // Nettoyage silencieux
+    })
+
+    await Promise.race([
+      client.connect(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Connexion IMAP trop longue (>20s)')), 20000)
+      ),
+    ])
+    const lock = await client.getMailboxLock('INBOX')
+
+    try {
+      // Emails (lus OU non lus) des derniers jours provenant des plateformes d'emploi connues.
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+
+      // Union des UIDs par expéditeur connu (LinkedIn, Indeed, Meteojob, etc.)
+      const uidSet = new Set()
+      for (const dom of ALERT_SENDERS) {
+        try {
+          const found = await client.search({ since, from: dom }, { uid: true })
+          if (Array.isArray(found)) found.forEach((u) => uidSet.add(u))
+        } catch { /* expéditeur ignoré */ }
+      }
+      const allUids = [...uidSet]
+      const list = []
+      const seen = new Set() // déduplication par offre
+
+      if (allUids.length > 0) {
+        for await (const msg of client.fetch(allUids.join(','), { uid: true, envelope: true, source: true }, { uid: true })) {
+          const env = msg.envelope || {}
+          const sujet = env.subject || ''
+          const fromAddr = (env.from && env.from[0] && env.from[0].address) || ''
+          const sourceDefaut = detecterSourceDepuisSujet(sujet) || detecterSourceDepuisAdresse(fromAddr) || 'Email'
+
+          let html = ''
+          try { html = extraireHtml(msg.source.toString('utf-8')) } catch { html = '' }
+
+          for (const j of extraireOffresDepuisHtml(html, sourceDefaut)) {
+            const cle = cleOffre(j.url)
+            if (seen.has(cle)) continue
+            seen.add(cle)
+            list.push({
+              id: `imap-${msg.uid}-${list.length}-${Date.now()}`,
+              titre: j.titre,
+              entreprise: j.entreprise || '',
+              description: '',
+              ville: j.ville || '',
+              source: j.source || sourceDefaut,
+              dateAjout: new Date().toISOString(),
+              url: j.url,
+              typeContrat: '',
+              remote: false,
+              tags: [],
+            })
+            if (list.length >= limit) break
+          }
+          if (list.length >= limit) break
+        }
+      }
+
+      return { ok: true, offres: list, total: allUids.length, uids: allUids }
+    } finally {
+      lock.release()
+      await client.logout()
     }
-    fs.writeFileSync(result.filePath, JSON.stringify(clean, null, 2), 'utf-8')
-    return { ok: true, chemin: result.filePath }
   } catch (err) {
-    return { ok: false, erreur: err.message }
+    return { ok: false, erreur: `Erreur IMAP : ${err.message}` }
   }
+})
+
+// === Expéditeurs d'alertes emploi (filtre de recherche IMAP) ===
+const ALERT_SENDERS = [
+  'linkedin.com', 'indeed.', 'meteojob.com', 'hellowork.com', 'hello-work.com',
+  'welcometothejungle.com', 'wttj.co', 'apec.fr', 'jobijoba', 'glassdoor',
+  'monster.', 'cadremploi.fr', 'regionsjob', 'talent.com', 'jobteaser.com',
+  'pole-emploi', 'francetravail', 'leboncoin',
+]
+
+// Liens pointant vers une offre individuelle (pas les liens de pub/désabonnement)
+const JOB_LINK = /(linkedin\.com\/(?:comm\/)?jobs\/view|indeed\.[a-z.]+\/(?:rc\/clk|viewjob|pagead|job|cmp)|meteojob\.com\/[^"']*(?:offre|emploi|job)|hello-?work\.com\/[^"']*emploi|welcometothejungle\.com\/[^"']*\/jobs\/|apec\.fr\/[^"']*(?:offre|detail)|jobijoba\.com\/[^"']*offre|glassdoor\.[a-z.]+\/[^"']*[Jj]ob|monster\.[a-z.]+\/[^"']*(?:job|emploi)|cadremploi\.fr\/[^"']*offre|leboncoin\.fr\/[^"']*offres)/i
+
+// Textes d'ancre génériques à ignorer
+const TEXTE_IGNORE = /^(voir|see all|view|postuler|apply|unsubscribe|se d[ée]sabonner|d[ée]sabonner|g[ée]rer|manage|toutes les offres|all jobs|plus d.offres|view all|en savoir plus|learn more|param[èe]tres|settings|aide|help|se connecter|sign in|t[ée]l[ée]charger|download)\b/i
+
+function decodeHtmlEntities(s) {
+  return s
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&nbsp;/gi, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+}
+
+function nettoyerTexte(s) {
+  return decodeHtmlEntities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim()
+}
+
+// Décode et isole la partie text/html d'un email MIME brut
+function extraireHtml(raw) {
+  const idx = raw.search(/Content-Type:\s*text\/html/i)
+  if (idx === -1) return raw
+  const part = raw.slice(idx)
+  const sep = part.search(/\r?\n\r?\n/)
+  if (sep === -1) return raw
+  const headers = part.slice(0, sep)
+  let body = part.slice(sep).replace(/^\r?\n\r?\n/, '')
+  const fin = body.search(/\r?\n--[-A-Za-z0-9_]+/)
+  if (fin !== -1) body = body.slice(0, fin)
+  const cte = (headers.match(/Content-Transfer-Encoding:\s*([\w-]+)/i) || [])[1] || ''
+  if (/base64/i.test(cte)) {
+    try { return Buffer.from(body.replace(/\s+/g, ''), 'base64').toString('utf-8') } catch { return body }
+  }
+  if (/quoted-printable/i.test(cte)) {
+    return body.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+  }
+  return body
+}
+
+// Extrait les offres individuelles (titre + lien) depuis le HTML d'une alerte
+function extraireOffresDepuisHtml(html, sourceDefaut) {
+  if (!html) return []
+  const jobs = []
+  const vus = new Set()
+  const anchorRe = /<a\b[^>]*?href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  let m
+  while ((m = anchorRe.exec(html)) !== null) {
+    const url = decodeHtmlEntities(m[1].trim())
+    if (!JOB_LINK.test(url)) continue
+    const titre = nettoyerTexte(m[2])
+    if (!titre || titre.length < 4 || titre.length > 160) continue
+    if (TEXTE_IGNORE.test(titre)) continue
+    if (/^https?:/i.test(titre)) continue
+    const cle = cleOffre(url)
+    if (vus.has(cle)) continue
+    vus.add(cle)
+    jobs.push({ titre, url, source: detecterSourceDepuisUrl(url) || sourceDefaut, entreprise: '', ville: '' })
+  }
+  return jobs
+}
+
+// Clé de déduplication : id d'offre si extractible, sinon host+chemin
+function cleOffre(url) {
+  const li = url.match(/jobs\/view\/(\d+)/i); if (li) return 'li:' + li[1]
+  const ind = url.match(/[?&]jk=([a-z0-9]+)/i); if (ind) return 'in:' + ind[1]
+  try { const u = new URL(url); return (u.hostname + u.pathname).toLowerCase().replace(/\/+$/, '') } catch { return url.toLowerCase() }
+}
+
+function detecterSourceDepuisAdresse(addr) {
+  const a = (addr || '').toLowerCase()
+  if (a.includes('linkedin')) return 'LinkedIn'
+  if (a.includes('indeed')) return 'Indeed'
+  if (a.includes('hellowork') || a.includes('hello-work')) return 'HelloWork'
+  if (a.includes('meteojob')) return 'Meteojob'
+  if (a.includes('welcometothejungle') || a.includes('wttj')) return 'Welcome to the Jungle'
+  if (a.includes('apec')) return 'APEC'
+  if (a.includes('jobijoba')) return 'Jobijoba'
+  if (a.includes('glassdoor')) return 'Glassdoor'
+  if (a.includes('monster')) return 'Monster'
+  if (a.includes('cadremploi')) return 'Cadremploi'
+  if (a.includes('francetravail') || a.includes('pole-emploi')) return 'France Travail'
+  if (a.includes('leboncoin')) return 'Leboncoin'
+  return ''
+}
+
+// Sur une URL, on réutilise la même détection par sous-chaîne de domaine
+function detecterSourceDepuisUrl(url) {
+  return detecterSourceDepuisAdresse(url)
+}
+
+// Détecte la source depuis le sujet ou l'expéditeur
+function detecterSourceDepuisSujet(sujet) {
+  const s = sujet.toLowerCase()
+  if (s.includes('linkedin')) return 'LinkedIn'
+  if (s.includes('indeed')) return 'Indeed'
+  if (s.includes('hello work') || s.includes('hellowork')) return 'HelloWork'
+  if (s.includes('france travail') || s.includes('francetravail') || s.includes('pôle emploi') || s.includes('pole emploi')) return 'France Travail'
+  if (s.includes('meteojob') || s.includes('météojob')) return 'Meteojob'
+  if (s.includes('jobijoba')) return 'Jobijoba'
+  if (s.includes('welcome') && s.includes('jungle')) return 'Welcome to the Jungle'
+  if (s.includes('apec')) return 'APEC'
+  if (s.includes('malt')) return 'Malt'
+  if (s.includes('comet')) return 'Comet'
+  return ''
+}
+
+// ── Ouvrir une URL externe ──────────────────────────────
+ipcMain.handle('open-url', async (_event, url) => {
+  if (typeof url === 'string' && url.startsWith('http')) shell.openExternal(url)
 })

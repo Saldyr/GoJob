@@ -4,6 +4,7 @@
   "build": {
     "appId": "com.gojob.app",
     "productName": "GoJob",
+    "electronDist": "node_modules/electron/dist",
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -17,8 +18,7 @@
       "target": [
         "portable",
         "nsis"
-      ],
-      "icon": "build/icon.ico"
+      ]
     },
     "portable": {
       "artifactName": "GoJob.${ext}"
@@ -36,20 +36,21 @@
     }
   },
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:5173 && node electron/dev-launch.cjs\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:build": "vite build && electron-builder",
-    "electron:start": "electron ."
+    "electron:start": "node electron/dev-launch.cjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "framer-motion": "^12.40.0",
+    "imapflow": "^1.4.2",
     "lucide-react": "^1.21.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -71,6 +72,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "playwright": "^1.61.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",

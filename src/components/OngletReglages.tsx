@@ -1,99 +1,167 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
-import { Settings, Key, Download, Upload, CheckCircle, Server } from 'lucide-react'
+import { Settings, Key, Server, Globe, CheckCircle } from 'lucide-react'
 import { Carte } from './ui/Carte'
 import { Bouton } from './ui/Bouton'
 import { Champ } from './ui/Champ'
+import PageHeader from './ui/PageHeader'
+import { useT } from '../i18n/useT'
 
 export default function OngletReglages() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
-  const offres = useStore((s) => s.offres)
-  const profile = useStore((s) => s.profile)
+  const { t } = useT()
 
   const [saved, setSaved] = useState(false)
+  const [imapTest, setImapTest] = useState<{ status: 'idle' | 'testing' | 'ok' | 'err'; msg: string }>({ status: 'idle', msg: '' })
+  type TestEtat = { status: 'idle' | 'testing' | 'ok' | 'err'; msg: string }
+  const [ftConnect, setFtConnect] = useState<TestEtat>({ status: 'idle', msg: '' })
+  const [cleTest, setCleTest] = useState<Record<'adzuna' | 'jooble' | 'reed', TestEtat>>({
+    adzuna: { status: 'idle', msg: '' },
+    jooble: { status: 'idle', msg: '' },
+    reed: { status: 'idle', msg: '' },
+  })
 
-  const set = (field: string, value: any) => {
-    updateSettings({ [field]: value })
+  const testerCle = async (plateforme: 'adzuna' | 'jooble' | 'reed') => {
+    setCleTest((e) => ({ ...e, [plateforme]: { status: 'testing', msg: 'Test en cours…' } }))
+    try {
+      const s = useStore.getState().settings
+      const r = await window.electronAPI?.testerCle?.({
+        plateforme,
+        adzunaAppId: s.adzunaAppId, adzunaAppKey: s.adzunaAppKey,
+        joobleKey: s.joobleKey, reedKey: s.reedKey,
+      })
+      if (r?.ok) {
+        setCleTest((e) => ({ ...e, [plateforme]: { status: 'ok', msg: `Clé valide — ${r.count ?? 0} offre(s) au test.` } }))
+      } else {
+        setCleTest((e) => ({ ...e, [plateforme]: { status: 'err', msg: r?.erreur || 'Échec du test.' } }))
+      }
+    } catch (err) {
+      setCleTest((e) => ({ ...e, [plateforme]: { status: 'err', msg: err instanceof Error ? err.message : String(err) } }))
+    }
+  }
+
+  // Charger les secrets safeStorage au montage
+  useEffect(() => {
+    (async () => {
+      if (!window.electronAPI?.chargerSecrets) return
+      const secrets = await window.electronAPI.chargerSecrets()
+      if (secrets && typeof secrets === 'object') {
+        const toUpdate: Record<string, string> = {}
+        if (secrets.franceTravailClientId) toUpdate.franceTravailClientId = secrets.franceTravailClientId
+        if (secrets.franceTravailClientSecret) toUpdate.franceTravailClientSecret = secrets.franceTravailClientSecret
+        if (secrets.imapUser) toUpdate.imapUser = secrets.imapUser
+        if (secrets.imapPassword) toUpdate.imapPassword = secrets.imapPassword
+        if (secrets.adzunaAppId) toUpdate.adzunaAppId = secrets.adzunaAppId
+        if (secrets.adzunaAppKey) toUpdate.adzunaAppKey = secrets.adzunaAppKey
+        if (secrets.joobleKey) toUpdate.joobleKey = secrets.joobleKey
+        if (secrets.reedKey) toUpdate.reedKey = secrets.reedKey
+        if (Object.keys(toUpdate).length) updateSettings(toUpdate)
+      }
+    })()
+    // Effet de montage uniquement (chargement des secrets safeStorage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const set = (field: string, value: string | number | boolean) => {
+    updateSettings({ [field]: value } as Partial<typeof settings>)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-  }
-
-  const exporter = () => {
-    const data = JSON.stringify({ profile, offres, settings }, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `gojob-export-${new Date().toISOString().split('T')[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const importer = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      const text = await file.text()
-      try {
-        const data = JSON.parse(text)
-        if (data.profile) useStore.getState().updateProfile(data.profile)
-        if (data.settings) useStore.getState().updateSettings(data.settings)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
-      } catch {
-        alert('Fichier JSON invalide')
-      }
+    // Persister les secrets via safeStorage
+    if (['imapUser', 'imapPassword', 'franceTravailClientId', 'franceTravailClientSecret', 'adzunaAppId', 'adzunaAppKey', 'joobleKey', 'reedKey'].includes(field)) {
+      const s = useStore.getState().settings
+      window.electronAPI?.sauvegarderSecrets?.({
+        imapUser: s.imapUser || undefined,
+        imapPassword: s.imapPassword || undefined,
+        franceTravailClientId: s.franceTravailClientId || undefined,
+        franceTravailClientSecret: s.franceTravailClientSecret || undefined,
+        adzunaAppId: s.adzunaAppId || undefined,
+        adzunaAppKey: s.adzunaAppKey || undefined,
+        joobleKey: s.joobleKey || undefined,
+        reedKey: s.reedKey || undefined,
+      }).catch(() => {})
     }
-    input.click()
+  }
+
+  // Bouton « Tester la clé » + message de résultat, pour Adzuna / Jooble / Reed
+  const renderTestCle = (p: 'adzuna' | 'jooble' | 'reed') => {
+    const etat = cleTest[p]
+    return (
+      <div className="space-y-2">
+        <Bouton variant="primaire" disabled={etat.status === 'testing'} onClick={() => testerCle(p)} className="w-full justify-center">
+          {etat.status === 'testing' ? 'Test en cours…' : 'Tester la clé'}
+        </Bouton>
+        {etat.status !== 'idle' && (
+          <div className={`p-3 rounded-xl text-sm border break-words ${
+            etat.status === 'ok' ? 'bg-vert/10 text-vert border-vert/20'
+            : etat.status === 'testing' ? 'bg-electric/10 text-electric border-electric/20'
+            : 'bg-rouge-error/10 text-rouge-error border-rouge-error/20'
+          }`}>
+            {etat.msg}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-8 animate-fadeIn">
       {/* En-tête */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-action to-action-vif flex items-center justify-center shadow-lg shadow-action-glow">
-            <Settings className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1>Paramètres</h1>
-            <p className="text-text-dim text-sm">Configurez votre assistant de recherche d'emploi</p>
-          </div>
-        </div>
-        {saved && (
+      <PageHeader
+        icon={<Settings className="w-5 h-5 text-white" />}
+        title={t('settings.title')}
+        subtitle="Connecte tes sources d'offres"
+        actions={saved && (
           <span className="flex items-center gap-1.5 text-vert text-sm font-medium">
-            <CheckCircle className="w-4 h-4" /> Enregistré
+            <CheckCircle className="w-4 h-4" /> {t('settings.saved')}
           </span>
         )}
-      </div>
+      />
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Configuration API */}
-        <Carte titre="Configuration API" icone={<Key className="w-5 h-5" />}>
+        {/* France Travail */}
+        <Carte titre="France Travail" icone={<Key className="w-5 h-5" />}>
           <div className="space-y-4">
-            <p className="text-sm text-text-dim">Configurez votre clé API pour la génération de lettres de motivation.</p>
-            <Champ label="Clé API" valeur={settings.cleApi} onChange={(v) => set('cleApi', v)} placeholder="sk-..." type="password" />
-            <div className="grid grid-cols-2 gap-4">
-              <Champ label="Endpoint" valeur={settings.endpoint} onChange={(v) => set('endpoint', v)} placeholder="https://api.openai.com/v1" />
-              <Champ label="Modèle" valeur={settings.modele} onChange={(v) => set('modele', v)} placeholder="gpt-4" />
-            </div>
+            <p className="text-sm text-text-dim">Identifiants API France Travail pour rechercher des offres.</p>
+            <Champ label="Client ID" valeur={settings.franceTravailClientId} onChange={(v) => set('franceTravailClientId', v)} placeholder="..." />
+            <Champ label="Client Secret" valeur={settings.franceTravailClientSecret} onChange={(v) => set('franceTravailClientSecret', v)} placeholder="..." type="password" />
+            <Bouton variant="primaire" disabled={ftConnect.status === 'testing'} onClick={async () => {
+              setFtConnect({ status: 'testing', msg: 'Connexion…' })
+              try {
+                const result = await window.electronAPI?.franceTravailConnect?.({
+                  clientId: settings.franceTravailClientId,
+                  clientSecret: settings.franceTravailClientSecret,
+                })
+                if (result?.ok) setFtConnect({ status: 'ok', msg: 'Connecté à France Travail ✓' })
+                else setFtConnect({ status: 'err', msg: result?.erreur || 'Erreur de connexion' })
+              } catch (e) {
+                setFtConnect({ status: 'err', msg: e instanceof Error ? e.message : String(e) })
+              }
+            }} className="w-full justify-center">
+              {ftConnect.status === 'testing' ? 'Connexion…' : 'Connecter France Travail'}
+            </Bouton>
+            {ftConnect.status !== 'idle' && (
+              <div className={`p-3 rounded-xl text-sm border break-words ${
+                ftConnect.status === 'ok' ? 'bg-vert/10 text-vert border-vert/20'
+                : ftConnect.status === 'testing' ? 'bg-electric/10 text-electric border-electric/20'
+                : 'bg-rouge-error/10 text-rouge-error border-rouge-error/20'
+              }`}>
+                {ftConnect.msg}
+              </div>
+            )}
           </div>
         </Carte>
 
         {/* Configuration IMAP */}
-        <Carte titre="Connexion IMAP" icone={<Server className="w-5 h-5" />}>
+        <Carte titre="Boîte mail (IMAP)" icone={<Server className="w-5 h-5" />}>
           <div className="space-y-4">
-            <p className="text-sm text-text-dim">Connectez votre boîte mail pour détecter automatiquement les réponses.</p>
-            <Champ label="Serveur" valeur={settings.imapHost} onChange={(v) => set('imapHost', v)} placeholder="imap.gmail.com" />
+            <p className="text-sm text-text-dim">Configure ta boîte mail pour importer les offres reçues.</p>
+            <Champ label="Hôte" valeur={settings.imapHost} onChange={(v) => set('imapHost', v)} placeholder="imap.gmail.com" />
             <div className="grid grid-cols-2 gap-4">
               <Champ label="Port" valeur={String(settings.imapPort)} onChange={(v) => set('imapPort', parseInt(v) || 993)} placeholder="993" />
-              <Champ label="Utilisateur" valeur={settings.imapUser} onChange={(v) => set('imapUser', v)} placeholder="email@exemple.com" />
+              <Champ label="Identifiant" valeur={settings.imapUser} onChange={(v) => set('imapUser', v)} placeholder="email@exemple.com" />
             </div>
-            <Champ label="Mot de passe" valeur={settings.imapPassword} onChange={(v) => set('imapPassword', v)} placeholder="Mot de passe ou token" type="password" />
+            <Champ label="Mot de passe" valeur={settings.imapPassword} onChange={(v) => set('imapPassword', v)} placeholder="********" type="password" />
             <label className="flex items-center gap-3">
               <input
                 type="checkbox"
@@ -101,32 +169,79 @@ export default function OngletReglages() {
                 onChange={(e) => set('imapTLS', e.target.checked)}
                 className="w-5 h-5 rounded-lg border border-bordure bg-surface-3 text-action focus:ring-action/30"
               />
-              <span className="text-sm text-text">Utiliser TLS</span>
+              <span className="text-sm text-text">TLS</span>
             </label>
+            <Bouton variant="primaire" disabled={imapTest.status === 'testing'} onClick={async () => {
+              setImapTest({ status: 'testing', msg: 'Connexion en cours…' })
+              try {
+                const r = await window.electronAPI?.imapConnect?.({
+                  host: settings.imapHost,
+                  port: settings.imapPort || 993,
+                  user: settings.imapUser,
+                  password: settings.imapPassword,
+                  tlsEnabled: settings.imapTLS !== false,
+                })
+                if (r?.ok) setImapTest({ status: 'ok', msg: r.message || 'Connexion réussie !' })
+                else setImapTest({ status: 'err', msg: r?.erreur || 'Échec de connexion' })
+              } catch (e) {
+                setImapTest({ status: 'err', msg: e instanceof Error ? e.message : String(e) })
+              }
+            }} className="w-full justify-center">
+              {imapTest.status === 'testing' ? 'Test en cours…' : 'Tester la connexion'}
+            </Bouton>
+            {imapTest.status !== 'idle' && (
+              <div className={`p-3 rounded-xl text-sm border break-words ${
+                imapTest.status === 'ok' ? 'bg-vert/10 text-vert border-vert/20'
+                : imapTest.status === 'testing' ? 'bg-electric/10 text-electric border-electric/20'
+                : 'bg-rouge-error/10 text-rouge-error border-rouge-error/20'
+              }`}>
+                {imapTest.msg}
+              </div>
+            )}
           </div>
         </Carte>
 
-        {/* France Travail */}
-        <Carte titre="API France Travail" icone={<Key className="w-5 h-5" />}>
+        {/* Adzuna — offres en ligne (Indeed FR/UK/ES/DE + job boards) */}
+        <Carte titre="Adzuna (offres en ligne)" icone={<Globe className="w-5 h-5" />}>
           <div className="space-y-4">
-            <p className="text-sm text-text-dim">Connectez-vous à l'API France Travail pour importer des offres automatiquement.</p>
-            <Champ label="Client ID" valeur={settings.franceTravailClientId} onChange={(v) => set('franceTravailClientId', v)} placeholder="..." />
-            <Champ label="Client Secret" valeur={settings.franceTravailClientSecret} onChange={(v) => set('franceTravailClientSecret', v)} placeholder="..." type="password" />
+            <p className="text-sm text-text-dim">
+              Agrège Indeed FR/UK/ES/DE et de nombreux job boards. Clé gratuite sur developer.adzuna.com.
+            </p>
+            <Champ label="App ID" valeur={settings.adzunaAppId} onChange={(v) => set('adzunaAppId', v)} placeholder="ex : 1a2b3c4d" />
+            <Champ label="App Key" valeur={settings.adzunaAppKey} onChange={(v) => set('adzunaAppKey', v)} placeholder="..." type="password" />
+            {renderTestCle('adzuna')}
           </div>
         </Carte>
 
-        {/* Données */}
-        <Carte titre="Export / Import" icone={<Download className="w-5 h-5" />}>
+        {/* Jooble — agrégateur multi-pays */}
+        <Carte titre="Jooble (offres en ligne)" icone={<Globe className="w-5 h-5" />}>
           <div className="space-y-4">
-            <p className="text-sm text-text-dim">Sauvegardez ou restaurez vos données (offres, profil, paramètres).</p>
-            <div className="flex gap-3">
-              <Bouton variant="primaire" onClick={exporter}>
-                <Download className="w-4 h-4" /> Exporter
-              </Bouton>
-              <Bouton variant="secondaire" onClick={importer}>
-                <Upload className="w-4 h-4" /> Importer
-              </Bouton>
-            </div>
+            <p className="text-sm text-text-dim">Agrégateur multi-pays. Une clé API gratuite (single key).</p>
+            <Champ label="Clé API" valeur={settings.joobleKey} onChange={(v) => set('joobleKey', v)} placeholder="..." type="password" />
+            {renderTestCle('jooble')}
+          </div>
+        </Carte>
+
+        {/* Reed — UK */}
+        <Carte titre="Reed (UK)" icone={<Globe className="w-5 h-5" />}>
+          <div className="space-y-4">
+            <p className="text-sm text-text-dim">Offres au Royaume-Uni (architecture incluse). Clé API gratuite.</p>
+            <Champ label="Clé API" valeur={settings.reedKey} onChange={(v) => set('reedKey', v)} placeholder="..." type="password" />
+            {renderTestCle('reed')}
+          </div>
+        </Carte>
+
+        {/* Langue */}
+        <Carte titre={t('settings.language')} icone={<Globe className="w-5 h-5" />}>
+          <div className="space-y-4">
+            <select
+              value={settings.langue}
+              onChange={(e) => set('langue', e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-bordure bg-surface-3 text-text text-sm focus:border-action focus:ring-1 focus:ring-action/30 transition-all"
+            >
+              <option value="fr">{t('settings.languages.fr')}</option>
+              <option value="es">{t('settings.languages.es')}</option>
+            </select>
           </div>
         </Carte>
       </div>

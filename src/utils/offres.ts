@@ -51,3 +51,43 @@ export function joursDepuis(dateISO: string): number {
   const diff = Date.now() - new Date(dateISO).getTime()
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
+
+export type OrigineOffre = 'france-travail' | 'email' | 'plateforme' | 'manuel'
+
+// Plateformes interrogées par API/connecteur (vs. reçues par alerte mail).
+// L'ordre définit l'affichage des compteurs / boutons de filtre.
+export const PLATEFORMES = ['Adzuna', 'Jooble', 'Reed'] as const
+export type Plateforme = (typeof PLATEFORMES)[number]
+
+const PLATEFORMES_EN_LIGNE = PLATEFORMES.map((p) => p.toLowerCase())
+
+/** Regroupe les sources d'une même plateforme (ex. "Adzuna FR/UK/ES/DE" → "Adzuna", "Reed UK" → "Reed"). */
+export function familleSource(source: string): string {
+  const s = source || 'Autre'
+  if (/^adzuna/i.test(s)) return 'Adzuna'
+  if (/^reed/i.test(s)) return 'Reed'
+  if (/^jooble/i.test(s)) return 'Jooble'
+  return s
+}
+
+/** Détermine l'origine d'une offre à partir de sa source. */
+export function origineOffre(o: { source?: string }): OrigineOffre {
+  const s = (o.source || '').toLowerCase()
+  if (s.includes('france travail') || s.includes('francetravail') || s.includes('pôle emploi') || s.includes('pole emploi')) {
+    return 'france-travail'
+  }
+  if (PLATEFORMES_EN_LIGNE.some((p) => s.includes(p))) return 'plateforme'
+  if (s === '' || s.includes('manuel')) return 'manuel'
+  return 'email'
+}
+
+// Canal de filtrage unifié : 'france-travail' | 'email' | 'manuel' | nom de plateforme ('Adzuna'…).
+// Sert à la fois aux compteurs et aux boutons de filtre (Tableau de bord + Offres).
+export type CanalOffre = 'tout' | 'france-travail' | 'email' | 'manuel' | Plateforme
+
+/** Renvoie le canal d'une offre : son origine simple, ou le nom de sa plateforme. */
+export function canalOffre(o: { source?: string }): Exclude<CanalOffre, 'tout'> {
+  const orig = origineOffre(o)
+  if (orig === 'plateforme') return familleSource(o.source || '') as Plateforme
+  return orig
+}
