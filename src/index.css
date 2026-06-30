@@ -1,25 +1,23 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════
-   GoJob — Nebula Glass Theme
-   Fond ultra-profond · Glassmorphism · Dégradés nébuleux
+   GoJob — Nebula Glass Theme v2
+   Palette Violet/ Bleu / Cyan
    ═══════════════════════════════════════════ */
 
 @theme {
   --font-sans: "Inter Variable", -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", monospace;
 
-  /* ── Nébuleuse : dégradés ── */
-  --color-nebula-1: #7C3AED;     /* violet profond */
-  --color-nebula-2: #A855F7;     /* violet vif */
-  --color-nebula-3: #EC4899;     /* magenta */
-  --color-nebula-4: #06B6D4;     /* cyan électrique */
-  --color-nebula-5: #3B82F6;     /* bleu secondaire */
+  /* ── Palette principale : Violet → Bleu → Cyan ── */
+  --color-nebula-1: #9b35ff;     /* violet électrique */
+  --color-nebula-2: #315cff;     /* bleu néon */
+  --color-nebula-3: #00d9ff;     /* cyan néon */
 
   /* ── Fond — abysse ── */
-  --color-abyss: #07070d;
-  --color-abyss-2: #0a0a14;
-  --color-abyss-3: #0d0e1a;
+  --color-abyss: #080914;
+  --color-abyss-2: #0a0a16;
+  --color-abyss-3: #0d0e1c;
   --color-surface-glass: rgba(255, 255, 255, 0.04);
   --color-surface-glass-2: rgba(255, 255, 255, 0.07);
   --color-border-glass: rgba(255, 255, 255, 0.08);
@@ -31,16 +29,16 @@
   --color-text-muted: #5c6180;
   --color-text-white: #ffffff;
 
-  /* ── Surfaces (alias Nebula) ── */
-  --color-surface: var(--color-abyss-2);
-  --color-surface-2: var(--color-abyss-3);
-  --color-surface-3: var(--color-surface-glass);
+  /* ── Surfaces ── */
+  --color-surface: var(--color-abyss);
+  --color-surface-2: var(--color-abyss-2);
+  --color-surface-3: var(--color-abyss-3);
   --color-bordure: var(--color-border-glass);
 
-  /* ── Action (alias Nebula) ── */
-  --color-action: #A855F7;
+  /* ── Action ── */
+  --color-action: #9b35ff;
   --color-action-deep: #7C3AED;
-  --color-action-vif: #EC4899;
+  --color-action-vif: #00d9ff;
 
   /* ── États ── */
   --color-success: #22C55E;
@@ -48,15 +46,15 @@
   --color-error: #EF4444;
   --color-rouge-error: #EF4444;
   --color-warn: #F59E0B;
-  --color-electric: #06B6D4;
+  --color-electric: #00d9ff;
   --color-rose: #EC4899;
 
-  /* ── Ombres & glows ── */
+  /* ── Ombres & glows (palette v2) ── */
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
   --shadow-glass-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
-  --shadow-glow-violet: 0 0 24px rgba(124, 58, 237, 0.2);
-  --shadow-glow-magenta: 0 0 24px rgba(236, 72, 153, 0.15);
-  --shadow-glow-cyan: 0 0 24px rgba(6, 182, 212, 0.12);
+  --shadow-glow-violet: 0 0 24px rgba(155, 53, 255, 0.25);
+  --shadow-glow-blue: 0 0 24px rgba(49, 92, 255, 0.2);
+  --shadow-glow-cyan: 0 0 24px rgba(0, 217, 255, 0.2);
 }
 
 /* ═══════════════════════════════════════════
@@ -100,13 +98,13 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 input, textarea, select { font-family: inherit; color: var(--color-text); background: transparent; }
 
 :focus-visible {
-  outline: 2px solid var(--color-nebula-2);
+  outline: 2px solid var(--color-nebula-1);
   outline-offset: 2px;
   border-radius: 8px;
 }
 
 ::selection {
-  background: rgba(124, 58, 237, 0.3);
+  background: rgba(155, 53, 255, 0.3);
 }
 
 /* ═══════════════════════════════════════════
@@ -162,7 +160,7 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.3), rgba(236, 72, 153, 0.15), rgba(6, 182, 212, 0.1));
+  background: linear-gradient(135deg, rgba(155, 53, 255, 0.3), rgba(49, 92, 255, 0.2), rgba(0, 217, 255, 0.15));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -170,7 +168,7 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
 }
 
 /* ═══════════════════════════════════════════
-   ANIMATIONS
+   ANIMATIONS — version néon
    ═══════════════════════════════════════════ */
 
 @keyframes fadeIn {
@@ -186,8 +184,20 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
   to { opacity: 1; transform: scale(1); }
 }
 @keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(124, 58, 237, 0.15); }
-  50% { box-shadow: 0 0 28px rgba(124, 58, 237, 0.3); }
+  0%, 100% { box-shadow: 0 0 12px rgba(155, 53, 255, 0.2); }
+  50% { box-shadow: 0 0 28px rgba(155, 53, 255, 0.4), 0 0 40px rgba(0, 217, 255, 0.15); }
+}
+@keyframes neonGlow {
+  0%, 100% { opacity: 0.6; filter: brightness(1); }
+  50% { opacity: 1; filter: brightness(1.2); }
+}
+@keyframes neonFlicker {
+  0%, 100% { opacity: 1; }
+  95% { opacity: 1; }
+  96% { opacity: 0.85; }
+  97% { opacity: 0.95; }
+  98% { opacity: 0.8; }
+  99% { opacity: 1; }
 }
 @keyframes shimmer {
   0% { background-position: -200% center; }
@@ -198,11 +208,18 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
+@keyframes cardGlow {
+  0%, 100% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
+  50% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(155, 53, 255, 0.08); }
+}
 
 .animate-fadeIn { animation: fadeIn 0.3s ease-out both; }
 .animate-slideUp { animation: slideUp 0.35s ease-out both; }
 .animate-scaleIn { animation: scaleIn 0.25s ease-out both; }
 .animate-glowPulse { animation: glowPulse 3s ease-in-out infinite; }
+.animate-neonGlow { animation: neonGlow 2.5s ease-in-out infinite; }
+.animate-neonFlicker { animation: neonFlicker 4s ease-in-out infinite; }
+.animate-cardGlow { animation: cardGlow 4s ease-in-out infinite; }
 
 /* Stagger children */
 .anim-stagger > * {
@@ -214,6 +231,21 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
 .anim-stagger > *:nth-child(4) { animation-delay: 0.14s; }
 .anim-stagger > *:nth-child(5) { animation-delay: 0.18s; }
 .anim-stagger > *:nth-child(6) { animation-delay: 0.22s; }
+
+/* ═══════════════════════════════════════════
+   NEON HOVER — glow au survol des boutons
+   ═══════════════════════════════════════════ */
+
+.neon-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.neon-hover:hover {
+  box-shadow:
+    0 0 12px rgba(155, 53, 255, 0.3),
+    0 0 24px rgba(49, 92, 255, 0.15),
+    0 0 36px rgba(0, 217, 255, 0.08);
+  border-color: rgba(155, 53, 255, 0.3);
+}
 
 /* ═══════════════════════════════════════════
    TRANSITIONS GLOBALES
@@ -231,9 +263,9 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
 
 .nebula-bg {
   background:
-    radial-gradient(ellipse 80% 60% at 0% 20%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 100% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(236, 72, 153, 0.04) 0%, transparent 40%),
+    radial-gradient(ellipse 80% 60% at 0% 20%, rgba(155, 53, 255, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 100% 80%, rgba(0, 217, 255, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(49, 92, 255, 0.04) 0%, transparent 40%),
     var(--color-abyss);
   animation: nebulaDrift 20s ease-in-out infinite;
   background-size: 200% 200%;

@@ -118,7 +118,7 @@ export default function OngletReglages() {
         )}
       />
 
-      <div className="grid lg:grid-cols-2 gap-6 items-start">
+      <div className="grid lg:grid-cols-2 gap-6 items-stretch">
         {/* France Travail */}
         <Carte titre="France Travail" icone={<Key className="w-5 h-5" />}>
           <div className="space-y-4">
@@ -138,7 +138,7 @@ export default function OngletReglages() {
                 setFtConnect({ status: 'err', msg: e instanceof Error ? e.message : String(e) })
               }
             }} className="w-full justify-center">
-              {ftConnect.status === 'testing' ? 'Connexion…' : 'Connecter France Travail'}
+              {ftConnect.status === 'testing' ? 'Connexion…' : 'Tester la connexion'}
             </Bouton>
             {ftConnect.status !== 'idle' && (
               <div className={`p-3 rounded-xl text-sm border break-words ${
