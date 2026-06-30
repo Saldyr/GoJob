@@ -1,6 +1,7 @@
 import { useStore } from '../store/useStore'
-import { Home, Briefcase, Settings, Sparkles } from 'lucide-react'
+import { Home, Briefcase, Settings } from 'lucide-react'
 import { useT } from '../i18n/useT'
+import Logo from './Logo'
 
 const NAV_ITEMS: { id: string; labelKey: string; icon: React.ElementType }[] = [
   { id: 'accueil', labelKey: 'sidebar.dashboard', icon: Home },
@@ -16,9 +17,7 @@ export default function Sidebar() {
   return (
     <aside className="w-72 shrink-0 h-screen flex flex-col border-r border-bordure bg-surface-2 overflow-y-auto">
       <div className="flex items-center gap-3 px-6 pt-6 pb-10">
-        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-action to-action-vif flex items-center justify-center shadow-lg shadow-action-glow">
-          <Sparkles className="w-6 h-6 text-white" />
-        </div>
+        <Logo />
         <div>
           <span className="text-xl font-bold text-white tracking-tight">GoJob</span>
           <span className="block text-xs text-text-dim font-medium mt-0.5">Agrégateur d'offres</span>

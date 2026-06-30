@@ -66,6 +66,7 @@ function createWindow() {
     minHeight: 640,
     resizable: true,
     title: 'GoJob',
+    icon: path.join(__dirname, '..', 'public', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

@@ -32,3 +32,7 @@ dist-ssr
 release/
 /nul
 test-screenshots/
+
+# Test artifacts
+.playwright-cli/
+test-results/
