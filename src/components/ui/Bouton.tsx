@@ -11,14 +11,22 @@ export function Bouton({ variant = 'primaire', children, onClick, type = 'button
   const base = 'inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed'
 
   const styles = {
-    primaire: 'bg-gradient-to-r from-action-deep to-action text-white shadow-md hover:shadow-lg hover:brightness-110 active:scale-[0.97]',
-    secondaire: 'border border-bordure bg-surface-3 text-text hover:bg-surface-2 hover:border-text-muted active:scale-[0.97]',
+    primaire: 'bg-gradient-to-r from-nebula-3 to-nebula-2 text-white shadow-md shadow-nebula-2/20 border border-white/10 hover:brightness-110 hover:shadow-lg active:scale-[0.97] transition-all duration-200',
+    secondaire: 'bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-white/20 active:scale-[0.97] transition-all duration-200',
     ghost: 'text-text-dim hover:text-text hover:bg-surface-3 active:scale-[0.97]',
   }
 
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${styles[variant]} ${className}`}>
+    <>
+    <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${styles[variant]} ${className}`}
+      style={variant === 'primaire' && !disabled ? {
+        background: 'linear-gradient(to right, #EC4899, #A855F7)',
+        color: 'white',
+        border: '1px solid rgba(255,255,255,0.1)',
+        boxShadow: '0 4px 6px -1px rgba(168,85,247,0.2)'
+      } : undefined}>
       {children}
     </button>
+    </>
   )
 }

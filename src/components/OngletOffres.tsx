@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore, type Offre } from '../store/useStore'
-import { Briefcase, ExternalLink, MapPin, Clock, Building2, Globe, X, Search, Mail } from 'lucide-react'
+import { Briefcase, ExternalLink, MapPin, Clock, Building2, Globe, X, Mail } from 'lucide-react'
 import { Bouton } from './ui/Bouton'
 import { joursDepuis, canalOffre, PLATEFORMES, type CanalOffre } from '../utils/offres'
 import PageHeader from './ui/PageHeader'
@@ -43,7 +43,7 @@ export default function OngletOffres() {
   const { t } = useT()
   const getContratLabel = (type: string) => t(`offers.contractLabels.${type}`)
 
-  const [recherche, setRecherche] = useState('')
+  const [recherche] = useState('')
   const [motsCles, setMotsCles] = useState<string[]>(storeMotsCles)
   const [saisieMotCle, setSaisieMotCle] = useState('')
   const [filtreContrat, setFiltreContrat] = useState<string[]>([])
@@ -199,8 +199,8 @@ export default function OngletOffres() {
       </div>
 
       {/* Barre de filtres (toujours visible) */}
-      <div className="rounded-2xl border border-bordure bg-surface-2 p-3 md:p-5 space-y-3 md:space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+      <div className="rounded-2xl border border-bordure bg-surface-2 p-2.5 md:p-3 space-y-2.5 md:space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
           {/* Mots-clés */}
           <div className="sm:col-span-2">
             <label className="text-xs font-medium text-text-muted mb-1 block">Mots-clés</label>
@@ -253,7 +253,7 @@ export default function OngletOffres() {
             <div className="flex flex-wrap gap-1">
               {TYPES_CONTRAT.map(t => (
                 <label key={t.val} className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium cursor-pointer border transition-all ${
-                  filtreContrat.includes(t.val) ? 'bg-action/15 text-action border-action/30' : 'bg-surface text-text-dim border-bordure hover:text-text'
+                  filtreContrat.includes(t.val) ? 'bg-action/15 text-action border-action/30' : 'bg-surface-glass-2 text-text-muted border-border-glass hover:border-action/40 hover:text-text'
                 }`}>
                   <input type="checkbox" checked={filtreContrat.includes(t.val)}
                     onChange={(e) => {
@@ -290,13 +290,7 @@ export default function OngletOffres() {
         </div>
       </div>
 
-      {/* Barre recherche locale */}
-      <div className="relative">
-        <input value={recherche} onChange={(e) => { setRecherche(e.target.value); setPage(1) }}
-          placeholder={t('offers.search')}
-          className="w-full pl-10 pr-4 py-3 rounded-xl border border-bordure bg-surface-2 text-text text-sm placeholder:text-text-muted/60 focus:border-action focus:ring-1 focus:ring-action/30 transition-all" />
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted w-4 h-4" />
-      </div>
+      {/* Suppression de la barre recherche locale — le panneau filtres fait déjà le job */}
 
 
       {/* Résumé des filtres actifs */}
@@ -365,10 +359,18 @@ export default function OngletOffres() {
             <Briefcase className="w-8 h-8 text-text-muted" />
           </div>
           <p className="text-text-dim text-lg font-medium mb-1">{offres.length === 0 ? t('offers.empty') : t('offers.noResults')}</p>
-          <p className="text-text-muted text-sm mb-6">
-            {offres.length > 0 ? 'Aucune offre ne correspond aux filtres sélectionnés.' : 'Importez ou ajoutez des offres depuis le Tableau de bord.'}
-          </p>
-          {offres.length === 0 && <p className="text-text-muted text-sm">Importe des offres depuis le Tableau de bord.</p>}
+          {offres.length > 0 ? (
+            <p className="text-text-muted text-sm mb-6">Aucune offre ne correspond aux filtres sélectionnés. Modifie tes filtres ou essaie d'autres mots-clés.</p>
+          ) : (
+            <p className="text-text-muted text-sm mb-6">Importe des offres depuis le Tableau de bord ou lance une recherche.</p>
+          )}
+          <Bouton variant="primaire" onClick={() => {
+            const s = useStore.getState().settings;
+            if (s.franceTravailClientId || s.adzunaAppId) {
+              const el = document.querySelector('[data-tab="offres"] input');
+              if (el instanceof HTMLInputElement) el.focus();
+            }
+          }}>🔍 Lancer une recherche</Bouton>
         </div>
       ) : (
         <>

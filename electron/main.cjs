@@ -1,3 +1,36 @@
+async function tenterAutoConnectFT() {
+  try {
+    if (!fs.existsSync(SECRETS_FILE)) return
+    const data = fs.readFileSync(SECRETS_FILE)
+    let json
+    if (safeStorage.isEncryptionAvailable()) {
+      json = safeStorage.decryptString(data)
+    } else {
+      json = Buffer.from(data.toString(), 'base64').toString('utf-8')
+    }
+    const secrets = JSON.parse(json)
+    const ft = secrets.franceTravail || {}
+    if (!ft.clientId || !ft.clientSecret) return
+    const res = await fetch('https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: ft.clientId.trim(),
+        client_secret: ft.clientSecret.trim(),
+        scope: 'api_offresdemploiv2 o2dsoffre',
+      }),
+    })
+    if (!res.ok) return
+    const body = await res.json()
+    franceTravailToken = body.access_token
+    franceTravailTokenExpires = Date.now() + (body.expires_in || 3600) * 1000
+    console.log('[FT] Reconnexion auto OK')
+  } catch (err) {
+    console.log('[FT] Reconnexion auto échouée:', err.message)
+  }
+}
+
 // Garde anti-ELECTRON_RUN_AS_NODE : si cette variable est héritée de l'environnement
 // (VS Code, terminal Hermes...), Electron démarre en Node pur et l'app crashe au lancement
 // Garde anti-ELECTRON_RUN_AS_NODE...
@@ -100,7 +133,7 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(async () => { createWindow(); setTimeout(tenterAutoConnectFT, 500) })
 app.on('window-all-closed', () => app.quit())
 app.on('activate', () => { if (mainWindow === null) createWindow() })
 

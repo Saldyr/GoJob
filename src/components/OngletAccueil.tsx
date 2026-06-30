@@ -204,7 +204,7 @@ export default function OngletAccueil() {
         ))}
       </div>
     ) : (
-      <p className="text-sm text-text-muted text-center py-6">{videMsg}</p>
+      <p className="text-sm text-text-dim text-center py-6">{videMsg}</p>
     )
 
   // Un dégradé distinct par plateforme (ordre = PLATEFORMES)
@@ -285,7 +285,7 @@ export default function OngletAccueil() {
         )}
 
         {importStatus === 'idle' && !settings.imapHost && (
-          <p className="mt-3 text-xs text-text-muted text-center">
+          <p className="mt-3 text-xs text-text-dim text-center">
             Configurez votre boîte mail et/ou France Travail dans l'onglet Paramètres.
           </p>
         )}

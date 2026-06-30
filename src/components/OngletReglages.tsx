@@ -118,7 +118,7 @@ export default function OngletReglages() {
         )}
       />
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
         {/* France Travail */}
         <Carte titre="France Travail" icone={<Key className="w-5 h-5" />}>
           <div className="space-y-4">
@@ -205,7 +205,7 @@ export default function OngletReglages() {
         <Carte titre="Adzuna (offres en ligne)" icone={<Globe className="w-5 h-5" />}>
           <div className="space-y-4">
             <p className="text-sm text-text-dim">
-              Agrège Indeed FR/UK/ES/DE et de nombreux job boards. Clé gratuite sur developer.adzuna.com.
+              Agrège Indeed FR/UK/ES/DE et de nombreux job boards. Clé gratuite sur <a href="https://developer.adzuna.com" target="_blank" rel="noopener noreferrer" className="text-action underline hover:text-action-vif">developer.adzuna.com</a>.
             </p>
             <Champ label="App ID" valeur={settings.adzunaAppId} onChange={(v) => set('adzunaAppId', v)} placeholder="ex : 1a2b3c4d" />
             <Champ label="App Key" valeur={settings.adzunaAppKey} onChange={(v) => set('adzunaAppKey', v)} placeholder="..." type="password" />
