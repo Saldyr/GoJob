@@ -1,8 +1,8 @@
 # GoJob
 
-Assistant de recherche d'emploi intelligent — desktop, Windows, local-first.
+**Dénicheur d'opportunités** — application desktop (Windows), *local-first*, qui centralise tes offres d'emploi provenant de plusieurs sources dans une seule interface.
 
-Gère tes candidatures, importe ton CV, connecte France Travail, et génère des lettres de motivation personnalisées avec un LLM de ton choix.
+GoJob récupère et regroupe les offres de **France Travail, Adzuna, Jooble, Reed** et de ta **boîte mail** (alertes IMAP), puis te laisse les explorer avec un tableau de bord (répartition par plateforme) et un moteur de recherche/filtres (mots-clés, source, ville, type de contrat, télétravail).
 
 ---
 
@@ -12,7 +12,7 @@ Gère tes candidatures, importe ton CV, connecte France Travail, et génère des
 - npm 10+
 - Windows 10 ou 11
 
-## Installation (pour toi, développeur)
+## Installation (développement)
 
 ```bash
 git clone <url-du-repo>
@@ -26,81 +26,73 @@ npm install
 npm run dev:electron
 ```
 
-Ça lance Vite (serveur web) + Electron en parallèle. Modifie le code, ça hot-reload.
+Lance Vite (serveur de dev) + Electron en parallèle, avec hot-reload.
 
-### Builder l'installeur .exe
+### Construire l'exécutable
 
 ```bash
 npm run electron:build
 ```
 
-L'installeur NSIS (Setup.exe) est créé dans `C:/projets/release/`. L'utilisatrice double-clique et c'est installé.
+Génère dans le dossier **`release/`** :
 
-> **Important** : tue toujours les processus Electron avant de builder :
-> ```cmd
-> taskkill /f /im electron.exe
-> taskkill /f /im GoJob.exe
-> ```
+- `GoJob Setup 1.0.0.exe` — **installateur** NSIS (choix du dossier, raccourcis bureau/menu démarrer)
+- `GoJob.exe` — **version portable** (aucune installation)
 
----
-
-## Configurer la clé API (LLM)
-
-Tu fais ça **dans l'application** :
-
-1. Lance GoJob
-2. Va dans l'onglet **Réglages**
-3. Renseigne ta clé API DeepSeek (ou autre fournisseur compatible OpenAI)
-4. Clique sur « Tester la connexion »
-
-⚠️ **Ne mets jamais ta clé dans un fichier `.env`** — GoJob ne lit aucun fichier de configuration. La clé est stockée chiffrée via `safeStorage` d'Electron et n'apparaît dans aucun export de données.
-
-### Fournisseurs gratuits / peu chers
-
-| Fournisseur | Endpoint | Modèle | Coût |
-|---|---|---|---|
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` | Gratuit (quota) |
-| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | Gratuit (limité req/min) |
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` | Payant (très faible) |
+> L'exécutable n'est pas signé : au premier lancement, Windows SmartScreen affichera « Éditeur inconnu » → *Informations complémentaires → Exécuter quand même*.
+>
+> Astuce : ferme les instances en cours avant de builder (`taskkill /f /im GoJob.exe`).
 
 ---
 
-## Réception automatique des offres
+## Configurer les sources
 
-- **France Travail** : connecte-toi via l'onglet Réglages avec les identifiants API France Travail de ton compte partenaire. La récupération se fait en temps réel.
-- **HelloWork, Meteojob, Comet, FreelanceRepublik, LinkedIn, etc.** : activable par alerte email IMAP (configurable dans Réglages) ou en ajoutant manuellement le lien de l'offre.
+Tout se fait **dans l'application**, onglet **Paramètres** — jamais dans un fichier.
+
+| Source | Ce qu'il faut renseigner | Où l'obtenir |
+|---|---|---|
+| France Travail | Identifiants API (client) | Compte partenaire `francetravail.io` |
+| Adzuna | Identifiants API (app) | `developer.adzuna.com` |
+| Jooble | Clé API | `jooble.org` (API) |
+| Reed | Clé API | `reed.co.uk/developers` |
+| Boîte mail (IMAP) | Hôte, port, identifiant, mot de passe, TLS | Ton fournisseur mail |
+
+Chaque source dispose d'un interrupteur d'activation et d'un bouton **« Tester la connexion »**. Une source désactivée disparaît partout (tableau de bord, compteurs, filtres).
+
+⚠️ **Aucune clé n'est stockée dans un fichier `.env` ni dans l'exécutable.** Les secrets sont chiffrés via `safeStorage` d'Electron dans le dossier utilisateur de la machine. Une installation sur une autre machine démarre donc **sans aucune clé** — chacun configure les siennes.
 
 ---
 
 ## Structure du projet
 
-```
+```text
 gojob/
 ├── electron/
-│   ├── main.js          # Processus principal Electron (IPC, fenêtre, safeStorage)
-│   └── preload.js       # Pont sécurisé entre main et renderer
+│   ├── main.cjs         # Processus principal (fenêtre, IPC, safeStorage, connecteurs API)
+│   ├── preload.cjs      # Pont sécurisé main ↔ renderer
+│   └── dev-launch.cjs   # Lanceur Electron en développement
 ├── src/
-│   ├── components/      # Composants React (onglets, sidebar, etc.)
-│   ├── store/           # Zustand store (profil, offres, réglages)
-│   ├── utils/           # API LLM, utilitaires
+│   ├── components/      # Composants React (onglets, sidebar, UI)
+│   ├── store/           # Zustand (profil, offres, réglages)
+│   ├── utils/           # Filtrage/normalisation des offres
 │   └── i18n/            # Traductions (fr, es)
+├── public/              # Assets (logo, favicon, icône)
+├── build/               # Ressources d'installateur (electron-builder)
 ├── dist/                # Build Vite (généré)
-├── build/               # Assets de build (icône, etc.)
-└── package.json
+└── release/             # Exécutables produits (généré)
 ```
 
 ---
 
 ## Sécurité
 
-- `contextIsolation: true` + `nodeIntegration: false` + sandbox
-- Clé API et identifiants IMAP chiffrés via `safeStorage` d'Electron
-- CSP restrictive : seuls les assets locaux et les endpoints API autorisés
-- Export de données : ne contient **jamais** les secrets (clé API, identifiants)
-- Aucun fichier `.env` jamais chargé
+- `contextIsolation: true` + `nodeIntegration: false`
+- Secrets (identifiants des sources) chiffrés via `safeStorage` d'Electron, hors du projet et hors du build
+- CSP restrictive : seuls les assets locaux et les endpoints des sources autorisés
+- Aucun fichier `.env` chargé ; l'export de données ne contient **jamais** les secrets
 
 ---
 
 ## Licence
 
-Private — usage personnel.
+Privé — usage personnel.
