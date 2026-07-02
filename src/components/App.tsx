@@ -61,17 +61,25 @@ export default function App() {
   const Composant = composants[currentTab] || OngletAccueil
 
   return (
-    <div className="flex h-screen bg-surface">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto min-w-0">
-        <div className="mx-auto w-full max-w-[1400px] px-6 py-8 lg:px-10 lg:py-10">
-          <AnimatePresence mode="wait">
-            <motion.div key={currentTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
-              <Composant />
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </main>
+    <div className="flex flex-col h-screen nebula-bg">
+      {/* Bande de titre custom : transparente (fond uni continu), sert de zone de déplacement.
+          Les 3 boutons Windows (– ▢ ✕) sont peints par l'overlay natif en haut à droite. */}
+      <div
+        className="h-10 shrink-0 w-full"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      />
+      <div className="flex flex-1 min-h-0">
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto min-w-0">
+          <div className="mx-auto w-full max-w-[1400px] px-6 pb-8 pt-2 lg:px-10 lg:pb-10">
+            <AnimatePresence mode="wait">
+              <motion.div key={currentTab} variants={pageVariants} initial="initial" animate="animate" exit="exit">
+                <Composant />
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

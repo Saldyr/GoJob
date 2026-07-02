@@ -1,0 +1,40 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#111322" />
+      <stop offset="100%" stop-color="#090A12" />
+    </linearGradient>
+    <linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#B14EFF" />
+      <stop offset="35%" stop-color="#7C3AED" />
+      <stop offset="60%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#22D3EE" />
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#B14EFF" flood-opacity="0.20" />
+      <feDropShadow dx="0" dy="0" stdDeviation="11" flood-color="#22D3EE" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- Fond : carré arrondi 22% -->
+  <rect x="0" y="0" width="1024" height="1024" rx="225"
+        fill="url(#bgGrad)"
+        stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+
+  <!-- Inner shadow box (boîte noire avec ombre interne) -->
+  <rect x="0" y="0" width="1024" height="1024" rx="225"
+        fill="none"
+        style="box-shadow: inset 0 0 0 0 rgba(0,0,0,0)" />
+
+  <!-- G + manche (un seul trait continu) -->
+  <path d="M 795.6 853.2 L 657.7 715.3 A 275 275 0 1 1 676.8 279.3"
+        fill="none" stroke="url(#gGrad)" stroke-width="70"
+        stroke-linecap="round" stroke-linejoin="round"
+        filter="url(#glow)" />
+
+  <!-- Barre horizontale du G -->
+  <path d="M 770.8 537.8 L 530 537.8"
+        fill="none" stroke="url(#gGrad)" stroke-width="70"
+        stroke-linecap="round"
+        filter="url(#glow)" />
+</svg>

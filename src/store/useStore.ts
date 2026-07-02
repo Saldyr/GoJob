@@ -56,6 +56,12 @@ export interface AppState {
     adzunaAppKey: string
     joobleKey: string
     reedKey: string
+    // Activation par plateforme (une source désactivée n'est pas utilisée)
+    franceTravailEnabled: boolean
+    imapEnabled: boolean
+    adzunaEnabled: boolean
+    joobleEnabled: boolean
+    reedEnabled: boolean
   }
   setProfile: (p: Profile) => void
   updateProfile: (p: Partial<Profile>) => void
@@ -107,6 +113,11 @@ const DEFAULT_SETTINGS: AppState['settings'] = {
   adzunaAppKey: '',
   joobleKey: '',
   reedKey: '',
+  franceTravailEnabled: true,
+  imapEnabled: true,
+  adzunaEnabled: true,
+  joobleEnabled: true,
+  reedEnabled: true,
 }
 
 function generateId(): string {
@@ -217,6 +228,11 @@ export const useStore = create<AppState>((set, get) => ({
           endpoint: (lsSettings.endpoint as string) || DEFAULT_SETTINGS.endpoint,
           modele: (lsSettings.modele as string) || DEFAULT_SETTINGS.modele,
           langue: (lsSettings.langue as string) || 'fr',
+          franceTravailEnabled: (lsSettings.franceTravailEnabled as boolean) ?? true,
+          imapEnabled: (lsSettings.imapEnabled as boolean) ?? true,
+          adzunaEnabled: (lsSettings.adzunaEnabled as boolean) ?? true,
+          joobleEnabled: (lsSettings.joobleEnabled as boolean) ?? true,
+          reedEnabled: (lsSettings.reedEnabled as boolean) ?? true,
         }
         set({
           profile: (migre.profile as Profile) || { ...DEFAULT_PROFILE },

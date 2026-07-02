@@ -98,8 +98,18 @@ function createWindow() {
     minWidth: 900,
     minHeight: 640,
     resizable: true,
+    autoHideMenuBar: true,
     title: 'GoJob',
     icon: path.join(__dirname, '..', 'public', 'icon.ico'),
+    // Barre de titre native masquée : plus de bandeau (icône + texte + fond différent).
+    // On garde uniquement les 3 boutons Windows (réduire / agrandir / fermer) via l'overlay,
+    // peints aux couleurs de l'app pour un fond parfaitement uni.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#080914',        // fond derrière les boutons = fond de l'app
+      symbolColor: '#c0c4d8',  // couleur des symboles – ▢ ✕
+      height: 40,
+    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -107,6 +117,7 @@ function createWindow() {
       sandbox: false,
     },
   })
+  mainWindow.removeMenu()
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const csp = app.isPackaged ? CSP_PROD : CSP_DEV

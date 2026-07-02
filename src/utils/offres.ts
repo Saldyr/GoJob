@@ -52,6 +52,22 @@ export function joursDepuis(dateISO: string): number {
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
+/** Libellé court d'ancienneté : « Aujourd'hui », « Hier », sinon « Nj ». */
+export function ancienneteCourt(dateISO: string): string {
+  const j = joursDepuis(dateISO)
+  if (j <= 0) return "Aujourd'hui"
+  if (j === 1) return 'Hier'
+  return `${j}j`
+}
+
+/** Libellé long d'ancienneté : « Aujourd'hui », « Hier », « il y a N jours ». */
+export function ancienneteLong(dateISO: string): string {
+  const j = joursDepuis(dateISO)
+  if (j <= 0) return "Aujourd'hui"
+  if (j === 1) return 'Hier'
+  return `il y a ${j} jours`
+}
+
 export type OrigineOffre = 'france-travail' | 'email' | 'plateforme' | 'manuel'
 
 // Plateformes interrogées par API/connecteur (vs. reçues par alerte mail).
@@ -90,4 +106,30 @@ export function canalOffre(o: { source?: string }): Exclude<CanalOffre, 'tout'> 
   const orig = origineOffre(o)
   if (orig === 'plateforme') return familleSource(o.source || '') as Plateforme
   return orig
+}
+
+/** Flags d'activation d'une plateforme (issus des Réglages). */
+export type ActivationPlateformes = {
+  franceTravailEnabled: boolean
+  imapEnabled: boolean
+  adzunaEnabled: boolean
+  joobleEnabled: boolean
+  reedEnabled: boolean
+}
+
+/** Un canal (plateforme) est-il actif d'après les Réglages ? ('manuel'/autres restent visibles). */
+export function canalActif(canal: Exclude<CanalOffre, 'tout'>, s: ActivationPlateformes): boolean {
+  switch (canal) {
+    case 'france-travail': return s.franceTravailEnabled
+    case 'email': return s.imapEnabled
+    case 'Adzuna': return s.adzunaEnabled
+    case 'Jooble': return s.joobleEnabled
+    case 'Reed': return s.reedEnabled
+    default: return true
+  }
+}
+
+/** Une offre appartient-elle à une plateforme actuellement activée ? */
+export function offreActive(o: { source?: string }, s: ActivationPlateformes): boolean {
+  return canalActif(canalOffre(o), s)
 }

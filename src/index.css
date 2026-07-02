@@ -20,8 +20,8 @@
   --color-abyss-3: #0d0e1c;
   --color-surface-glass: rgba(255, 255, 255, 0.04);
   --color-surface-glass-2: rgba(255, 255, 255, 0.07);
-  --color-border-glass: rgba(255, 255, 255, 0.08);
-  --color-border-glass-hover: rgba(255, 255, 255, 0.14);
+  --color-border-glass: rgba(140, 130, 205, 0.11);
+  --color-border-glass-hover: rgba(165, 130, 255, 0.26);
 
   /* ── Texte ── */
   --color-text: #e8eaf0;
@@ -96,11 +96,21 @@ h3 { font-size: 14px; font-weight: 600; color: var(--color-text-white); }
 
 button { cursor: pointer; border: none; background: none; font-family: inherit; }
 input, textarea, select { font-family: inherit; color: var(--color-text); background: transparent; }
+/* Options des menus déroulants : lisibles sur fond sombre (fini le blanc sur blanc) */
+select option { background-color: #0d0e1c; color: #e8eaf0; }
 
 :focus-visible {
   outline: 2px solid var(--color-nebula-1);
   outline-offset: 2px;
   border-radius: 8px;
+}
+
+/* Les champs de formulaire ont déjà leur focus discret (bordure + ring fin) :
+   on retire le gros contour violet global qui les rendait moches. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
 }
 
 ::selection {
@@ -126,16 +136,18 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
 }
 
 .glass-card {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.05) 0%,
-    rgba(255, 255, 255, 0.02) 100%
-  );
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* Fond opaque (base sombre + léger dégradé blanc) : évite l'artefact de coutures
+     claires intermittentes du backdrop-filter, tout en gardant l'aspect « glass ». */
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    ),
+    var(--color-abyss-2);
   border: 1px solid var(--color-border-glass);
   box-shadow: var(--shadow-glass);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--anim-micro) var(--anim-ease);
 }
 
 .glass-card:hover {
@@ -213,9 +225,6 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
   50% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(155, 53, 255, 0.08); }
 }
 
-.animate-fadeIn { animation: fadeIn 0.3s ease-out both; }
-.animate-slideUp { animation: slideUp 0.35s ease-out both; }
-.animate-scaleIn { animation: scaleIn 0.25s ease-out both; }
 .animate-glowPulse { animation: glowPulse 3s ease-in-out infinite; }
 .animate-neonGlow { animation: neonGlow 2.5s ease-in-out infinite; }
 .animate-neonFlicker { animation: neonFlicker 4s ease-in-out infinite; }
@@ -223,7 +232,7 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
 
 /* Stagger children */
 .anim-stagger > * {
-  animation: fadeIn 0.3s ease-out both;
+  animation: fadeIn var(--anim-normal) var(--anim-ease) both;
 }
 .anim-stagger > *:nth-child(1) { animation-delay: 0.02s; }
 .anim-stagger > *:nth-child(2) { animation-delay: 0.06s; }
@@ -237,7 +246,7 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
    ═══════════════════════════════════════════ */
 
 .neon-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--anim-normal) var(--anim-ease);
 }
 .neon-hover:hover {
   box-shadow:
@@ -248,25 +257,90 @@ input, textarea, select { font-family: inherit; color: var(--color-text); backgr
 }
 
 /* ═══════════════════════════════════════════
-   TRANSITIONS GLOBALES
+   SYSTÈME D'ANIMATIONS UNIFORMES
    ═══════════════════════════════════════════ */
 
-* {
-  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
+:root {
+  --anim-micro: 150ms;
+  --anim-fast: 200ms;
+  --anim-normal: 250ms;
+  --anim-slow: 300ms;
+  --anim-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+.animate-fadeIn { animation: fadeIn var(--anim-normal) var(--anim-ease) both; }
+.animate-slideUp { animation: slideUp var(--anim-slow) var(--anim-ease) both; }
+.animate-scaleIn { animation: scaleIn var(--anim-normal) var(--anim-ease) both; }
 
 /* ═══════════════════════════════════════════
    NEBULA GRADIENT — arrière-plan animé
    ═══════════════════════════════════════════ */
 
 .nebula-bg {
-  background:
-    radial-gradient(ellipse 80% 60% at 0% 20%, rgba(155, 53, 255, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 100% 80%, rgba(0, 217, 255, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(49, 92, 255, 0.04) 0%, transparent 40%),
-    var(--color-abyss);
-  animation: nebulaDrift 20s ease-in-out infinite;
-  background-size: 200% 200%;
+  background-color: var(--color-abyss);
+  background-image:
+    /* Grain : dither qui casse le banding — bruit plus marqué (blend overlay) */
+    url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='160'%20height='160'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.9'%20numOctaves='4'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA%20type='linear'%20slope='0.9'%20intercept='0'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='160'%20height='160'%20filter='url(%23n)'/%3E%3C/svg%3E"),
+    /* Violet — coin haut gauche : halo doux et discret, fondu très progressif */
+    radial-gradient(ellipse 54% 50% at 0% 0%,
+      rgba(155, 53, 255, 0.075) 0%,
+      rgba(155, 53, 255, 0.055) 12%,
+      rgba(155, 53, 255, 0.038) 24%,
+      rgba(155, 53, 255, 0.025) 36%,
+      rgba(155, 53, 255, 0.015) 48%,
+      rgba(155, 53, 255, 0.008) 60%,
+      rgba(155, 53, 255, 0.003) 72%,
+      transparent 86%),
+    /* Cyan — coin bas droite : même halo doux, fondu très progressif */
+    radial-gradient(ellipse 52% 48% at 100% 100%,
+      rgba(0, 217, 255, 0.07) 0%,
+      rgba(0, 217, 255, 0.05) 12%,
+      rgba(0, 217, 255, 0.035) 24%,
+      rgba(0, 217, 255, 0.023) 36%,
+      rgba(0, 217, 255, 0.014) 48%,
+      rgba(0, 217, 255, 0.007) 60%,
+      rgba(0, 217, 255, 0.003) 72%,
+      transparent 86%);
+  background-repeat: repeat, no-repeat, no-repeat;
+  background-size: 140px 140px, 100% 100%, 100% 100%;
+  background-blend-mode: overlay, normal, normal;
+}
+
+/* ═══════════════════════════════════════════
+   CARD HOVER — survol discret, teinte Nebula (jamais de cadre blanc)
+   ═══════════════════════════════════════════ */
+
+/* Contour gris pour les champs de type <button> (ex. Source) : le reset global
+   `button { border: none }` — non-layered — annule sinon la bordure Tailwind (layered). */
+.contour-champ {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.contour-champ:focus-visible,
+.contour-champ:focus {
+  border-color: var(--color-action);
+}
+
+/* Pagination : lueur colorée émanant uniquement du chiffre de la page active (aucun halo carré) */
+.page-active-glow {
+  color: #ffffff;
+  /* Disque de lumière léger derrière le chiffre, éteint avant les bords → pas de carré */
+  background-image: radial-gradient(circle at center,
+    rgba(0, 217, 255, 0.18) 0%,
+    rgba(155, 53, 255, 0.12) 40%,
+    transparent 66%);
+  text-shadow:
+    0 0 6px rgba(0, 217, 255, 0.9),
+    0 0 13px rgba(155, 53, 255, 0.9),
+    0 0 22px rgba(0, 217, 255, 0.6);
+}
+
+.card-hover {
+  transition: border-color .18s var(--anim-ease), background .18s var(--anim-ease),
+              box-shadow .18s var(--anim-ease), transform .18s var(--anim-ease);
+}
+.card-hover:hover {
+  border-color: rgba(155, 53, 255, 0.28);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5), 0 0 24px rgba(155, 53, 255, 0.10);
+  transform: translateY(-1px);
 }

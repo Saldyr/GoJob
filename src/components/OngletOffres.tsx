@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore, type Offre } from '../store/useStore'
-import { Briefcase, ExternalLink, MapPin, Clock, Building2, Globe, X, Mail } from 'lucide-react'
+import { Briefcase, ExternalLink, MapPin, Clock, Building2, Globe, X, Mail, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check } from 'lucide-react'
 import { Bouton } from './ui/Bouton'
-import { joursDepuis, canalOffre, PLATEFORMES, type CanalOffre } from '../utils/offres'
+import { ancienneteLong, canalOffre, canalActif, offreActive, PLATEFORMES, type CanalOffre } from '../utils/offres'
 import PageHeader from './ui/PageHeader'
 import { useT } from '../i18n/useT'
 
@@ -10,10 +10,6 @@ import { useT } from '../i18n/useT'
 const TYPES_CONTRAT: { val: string; label: string }[] = [
   { val: 'cdi', label: 'CDI' },
   { val: 'cdd', label: 'CDD' },
-  { val: 'freelance', label: 'Freelance' },
-  { val: 'stage', label: 'Stage' },
-  { val: 'alternance', label: 'Alternance' },
-  { val: 'interim', label: 'Intérim' },
 ]
 
 function initiales(nom: string): string {
@@ -35,12 +31,20 @@ function couleurEntreprise(nom: string): string {
 }
 
 export default function OngletOffres() {
-  const offres = useStore((s) => s.offres)
+  const offresBrutes = useStore((s) => s.offres)
+  const settings = useStore((s) => s.settings)
   const storeMotsCles = useStore((s) => s.searchMotsCles)
   const setStoreMotsCles = useStore((s) => s.setSearchMotsCles)
   const filtreCanal = useStore((s) => s.offresFiltre)
   const setFiltreCanal = useStore((s) => s.setOffresFiltre)
   const { t } = useT()
+  // Offres visibles = uniquement celles des plateformes activées dans les Réglages.
+  const offres = offresBrutes.filter((o) => offreActive(o, settings))
+
+  // Si le filtre courant pointe vers une plateforme désactivée, on revient à « Toutes ».
+  useEffect(() => {
+    if (filtreCanal !== 'tout' && !canalActif(filtreCanal, settings)) setFiltreCanal('tout')
+  }, [filtreCanal, settings, setFiltreCanal])
   const getContratLabel = (type: string) => t(`offers.contractLabels.${type}`)
 
   const [recherche] = useState('')
@@ -48,7 +52,8 @@ export default function OngletOffres() {
   const [saisieMotCle, setSaisieMotCle] = useState('')
   const [filtreContrat, setFiltreContrat] = useState<string[]>([])
   const [filtreRemote, setFiltreRemote] = useState(false)
-  const [filtreSource, setFiltreSource] = useState('')
+  const [filtreSource, setFiltreSource] = useState<string[]>([])
+  const [sourceOuvert, setSourceOuvert] = useState(false)
   const [filtreLocalisation, setFiltreLocalisation] = useState<string[]>([])
   const [saisieVille, setSaisieVille] = useState('')
   const [triDate, setTriDate] = useState<'nouveau' | 'ancien'>('nouveau')
@@ -93,8 +98,8 @@ export default function OngletOffres() {
       }
     }
 
-    // France Travail
-    if (s.franceTravailClientId && s.franceTravailClientSecret && window.electronAPI?.franceTravailOffres) {
+    // France Travail (seulement si activée)
+    if (s.franceTravailEnabled && s.franceTravailClientId && s.franceTravailClientSecret && window.electronAPI?.franceTravailOffres) {
       try {
         const r = await window.electronAPI.franceTravailOffres({ motsCles: requete, localisation: loc })
         if (r.ok) ajouter(r.offres || [])
@@ -104,14 +109,17 @@ export default function OngletOffres() {
       }
     }
 
-    // Plateformes en ligne (Adzuna, Jooble, Reed)
-    if (window.electronAPI?.chercherEnLigne) {
+    // Plateformes en ligne — uniquement celles activées (Adzuna, Jooble, Reed)
+    if (window.electronAPI?.chercherEnLigne && (s.adzunaEnabled || s.joobleEnabled || s.reedEnabled)) {
       try {
-        const r = await window.electronAPI.chercherEnLigne({
-          motsCles: requete, localisation: loc,
-          adzunaAppId: s.adzunaAppId, adzunaAppKey: s.adzunaAppKey,
-          joobleKey: s.joobleKey, reedKey: s.reedKey,
-        })
+        const cfg: {
+          motsCles: string; localisation: string
+          adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string
+        } = { motsCles: requete, localisation: loc }
+        if (s.adzunaEnabled) { cfg.adzunaAppId = s.adzunaAppId; cfg.adzunaAppKey = s.adzunaAppKey }
+        if (s.joobleEnabled) cfg.joobleKey = s.joobleKey
+        if (s.reedEnabled) cfg.reedKey = s.reedKey
+        const r = await window.electronAPI.chercherEnLigne(cfg)
         if (r.ok) ajouter(r.offres || [])
         if (r.erreurs?.length) erreurs.push(...r.erreurs)
       } catch (e) {
@@ -139,11 +147,11 @@ export default function OngletOffres() {
 
   // Boutons de filtre : origines + une entrée par plateforme configurable.
   const CANAUX: { val: CanalOffre; label: string; icon: React.ReactNode }[] = [
-    { val: 'tout', label: 'Toutes', icon: <Briefcase className="w-4 h-4" /> },
-    { val: 'france-travail', label: 'France Travail', icon: <Building2 className="w-4 h-4" /> },
-    { val: 'email', label: 'Boîte mail', icon: <Mail className="w-4 h-4" /> },
+    { val: 'tout' as CanalOffre, label: 'Toutes', icon: <Briefcase className="w-4 h-4" /> },
+    { val: 'france-travail' as CanalOffre, label: 'France Travail', icon: <Building2 className="w-4 h-4" /> },
+    { val: 'email' as CanalOffre, label: 'Boîte mail', icon: <Mail className="w-4 h-4" /> },
     ...PLATEFORMES.map((p) => ({ val: p as CanalOffre, label: p, icon: <Globe className="w-4 h-4" /> })),
-  ]
+  ].filter((c) => c.val === 'tout' || canalActif(c.val as Exclude<CanalOffre, 'tout'>, settings))
 
   const filtrees = offres
     .filter((o) => {
@@ -152,10 +160,14 @@ export default function OngletOffres() {
         const q = recherche.toLowerCase()
         if (!o.titre.toLowerCase().includes(q) && !o.entreprise.toLowerCase().includes(q)) return false
       }
-      if (storeMotsCles.length > 0 && !storeMotsCles.some(m => o.titre.toLowerCase().includes(m))) return false
+      if (storeMotsCles.length > 0) {
+        // On cherche dans le titre, la description ET les tags (ex. « freelance », « intérim »)
+        const texte = `${o.titre} ${o.description || ''} ${(o.tags || []).join(' ')}`.toLowerCase()
+        if (!storeMotsCles.some(m => texte.includes(m))) return false
+      }
       if (filtreContrat.length > 0 && (!o.typeContrat || !filtreContrat.includes(o.typeContrat))) return false
       if (filtreRemote && !o.remote) return false
-      if (filtreSource && o.source !== filtreSource) return false
+      if (filtreSource.length > 0 && !filtreSource.includes(o.source)) return false
       if (filtreLocalisation.length > 0 && o.ville) {
         const v = o.ville.toLowerCase()
         if (!filtreLocalisation.some(city => v.includes(city.toLowerCase()))) return false
@@ -167,12 +179,18 @@ export default function OngletOffres() {
       return new Date(a.dateAjout).getTime() - new Date(b.dateAjout).getTime()
     })
 
-  const nbFiltresActifs = [...motsCles, ...filtreContrat, filtreSource, ...filtreLocalisation, filtreRemote ? 'remote' : ''].filter(Boolean).length
+  const nbFiltresActifs = [...motsCles, ...filtreContrat, ...filtreSource, ...filtreLocalisation, filtreRemote ? 'remote' : ''].filter(Boolean).length
 
   const totalPages = Math.max(1, Math.ceil(filtrees.length / OFFRES_PAR_PAGE))
   const pageCourante = Math.min(page, totalPages)
   const debut = (pageCourante - 1) * OFFRES_PAR_PAGE
   const affichees = filtrees.slice(debut, debut + OFFRES_PAR_PAGE)
+
+  // Pagination : fenêtre glissante de 15 numéros max, centrée sur la page courante
+  const FENETRE = 15
+  const debutFenetre = Math.max(1, Math.min(pageCourante - Math.floor(FENETRE / 2), totalPages - FENETRE + 1))
+  const finFenetre = Math.min(totalPages, debutFenetre + FENETRE - 1)
+  const pagesVisibles = Array.from({ length: finFenetre - debutFenetre + 1 }, (_, i) => debutFenetre + i)
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -198,95 +216,121 @@ export default function OngletOffres() {
         ))}
       </div>
 
-      {/* Barre de filtres (toujours visible) */}
-      <div className="rounded-2xl border border-bordure bg-surface-2 p-2.5 md:p-3 space-y-2.5 md:space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
-          {/* Mots-clés */}
-          <div className="sm:col-span-2">
-            <label className="text-xs font-medium text-text-muted mb-1 block">Mots-clés</label>
-            <div className="flex gap-1">
-              <input value={saisieMotCle} onChange={(e) => setSaisieMotCle(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); ajouterMotCle() } }}
-                placeholder="Architecte, BIM..."
-                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-bordure bg-surface text-text text-xs placeholder:text-text-muted/60 focus:border-action focus:ring-1 focus:ring-action/30" />
-              <button type="button" onClick={ajouterMotCle}
-                className="shrink-0 px-2.5 py-1.5 rounded-lg bg-action/15 text-action border border-action/20 text-xs font-medium hover:bg-action/25 transition-all">+</button>
-            </div>
+      {/* Barre de recherche & filtres — même fond « glass » que les cartes du dashboard */}
+      <div className="rounded-2xl border border-border-glass bg-surface-2 bg-gradient-to-br from-surface-glass-2 to-surface-glass shadow-glass p-4 md:p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Search className="w-4 h-4 text-action" />
+          <span className="text-sm font-semibold text-text">Rechercher &amp; filtrer</span>
+        </div>
+        {/* Mots-clés (pleine largeur) */}
+        <div>
+          <label className="text-xs font-medium text-text-muted mb-1.5 block">Mots-clés</label>
+          <div className="flex gap-2">
+            <input value={saisieMotCle} onChange={(e) => setSaisieMotCle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); ajouterMotCle() } }}
+              placeholder="Rechercher par mot-clé"
+              className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-white/15 bg-surface text-text text-sm placeholder:text-text-muted/60 focus:border-action focus:ring-1 focus:ring-action/30" />
+            <button type="button" onClick={ajouterMotCle} aria-label="Ajouter le mot-clé"
+              className="shrink-0 w-11 rounded-lg bg-action/20 text-action border border-action/40 text-2xl font-semibold leading-none flex items-center justify-center hover:bg-action/30 transition-all">+</button>
           </div>
+        </div>
 
-          {/* Source + Localisation sur mobile : empilés */}
-          <div className="sm:col-span-1">
-            <label className="text-xs font-medium text-text-muted mb-1 block">Source</label>
-            <select value={filtreSource} onChange={(e) => setFiltreSource(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg border border-bordure bg-surface text-text text-xs focus:border-action focus:ring-1 focus:ring-action/30">
-              <option value="">Toutes</option>
-              {sources.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+        {/* Source (réduit) + Localisation */}
+        <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+          {/* Source — multi-sélection : on peut cocher autant de sources qu'on veut */}
+          <div className="sm:w-52 shrink-0">
+            <label className="text-xs font-medium text-text-muted mb-1.5 block">Source</label>
+            <div className="relative">
+              <button type="button" onClick={() => setSourceOuvert(o => !o)} aria-haspopup="listbox"
+                className="contour-champ w-full px-3 py-2 rounded-lg bg-surface text-text text-sm flex items-center justify-between gap-2 focus:ring-1 focus:ring-action/30 transition-colors">
+                <span className={`truncate ${filtreSource.length === 0 ? 'text-text-muted' : ''}`}>
+                  {filtreSource.length === 0 ? 'Toutes' : filtreSource.length === 1 ? filtreSource[0] : `${filtreSource.length} sources`}
+                </span>
+                <ChevronDown className={`w-4 h-4 shrink-0 text-text-muted transition-transform ${sourceOuvert ? 'rotate-180' : ''}`} />
+              </button>
+              {sourceOuvert && (
+                <>
+                  {/* fond invisible pour fermer au clic extérieur */}
+                  <div className="fixed inset-0 z-10" onClick={() => setSourceOuvert(false)} />
+                  <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-white/15 bg-surface-2 shadow-lg py-1">
+                    <button type="button" onClick={() => setFiltreSource([])}
+                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-surface-glass transition-colors ${filtreSource.length === 0 ? 'text-action font-medium' : 'text-text-dim'}`}>
+                      Toutes
+                    </button>
+                    {sources.map(s => {
+                      const coche = filtreSource.includes(s)
+                      return (
+                        <button key={s} type="button"
+                          onClick={() => setFiltreSource(coche ? filtreSource.filter(x => x !== s) : [...filtreSource, s])}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-text-dim hover:bg-surface-glass transition-colors">
+                          <span className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${coche ? 'bg-action border-action' : 'border-white/25'}`}>
+                            {coche && <Check className="w-3 h-3 text-white" />}
+                          </span>
+                          <span className="truncate">{s}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Localisation */}
-          <div className="sm:col-span-1">
-            <label className="text-xs font-medium text-text-muted mb-1 block">Localisation</label>
-            <div className="flex flex-wrap gap-1 mb-1">
-              {filtreLocalisation.map(v => (
-                <button key={v} onClick={() => setFiltreLocalisation(filtreLocalisation.filter(x => x !== v))}
-                  className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-surface-3 text-text-dim border border-bordure hover:bg-surface-3/80 transition-all">
-                  {v} <X className="w-2.5 h-2.5" />
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1">
+          <div className="flex-1 min-w-0">
+            <label className="text-xs font-medium text-text-muted mb-1.5 block">Localisation</label>
+            <div className="flex gap-2">
               <input value={saisieVille} onChange={(e) => setSaisieVille(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); ajouterVille() } }}
                 placeholder="Ville"
-                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-bordure bg-surface text-text text-xs placeholder:text-text-muted/60 focus:border-action focus:ring-1 focus:ring-action/30" />
-              <button type="button" onClick={ajouterVille}
-                className="shrink-0 px-2.5 py-1.5 rounded-lg bg-action/15 text-action border border-action/20 text-xs font-medium hover:bg-action/25 transition-all">+</button>
+                className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-white/15 bg-surface text-text text-sm placeholder:text-text-muted/60 focus:border-action focus:ring-1 focus:ring-action/30" />
+              <button type="button" onClick={ajouterVille} aria-label="Ajouter la ville"
+                className="shrink-0 w-11 rounded-lg bg-action/20 text-action border border-action/40 text-2xl font-semibold leading-none flex items-center justify-center hover:bg-action/30 transition-all">+</button>
             </div>
           </div>
         </div>
 
-        {/* Deuxième ligne : contrat + remote + tri + recherche */}
-        <div className="flex flex-wrap items-end gap-2 md:gap-3">
-          <div className="w-full sm:w-auto">
-            <label className="text-xs font-medium text-text-muted mb-1 block">Type contrat</label>
-            <div className="flex flex-wrap gap-1">
-              {TYPES_CONTRAT.map(t => (
-                <label key={t.val} className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium cursor-pointer border transition-all ${
-                  filtreContrat.includes(t.val) ? 'bg-action/15 text-action border-action/30' : 'bg-surface-glass-2 text-text-muted border-border-glass hover:border-action/40 hover:text-text'
-                }`}>
-                  <input type="checkbox" checked={filtreContrat.includes(t.val)}
-                    onChange={(e) => {
-                      if (e.target.checked) setFiltreContrat([...filtreContrat, t.val])
-                      else setFiltreContrat(filtreContrat.filter(v => v !== t.val))
-                    }}
-                    className="sr-only" />
-                  {t.label}
-                </label>
-              ))}
-            </div>
+        {/* Type de contrat + Remote (CDI, CDD, Remote) */}
+        <div>
+          <label className="text-xs font-medium text-text-muted mb-1.5 block">Type de contrat</label>
+          <div className="flex flex-wrap gap-2">
+            {TYPES_CONTRAT.map(t => (
+              <label key={t.val} className={`flex items-center px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer border transition-all ${
+                filtreContrat.includes(t.val) ? 'bg-action/15 text-action border-action/40' : 'bg-surface-glass-2 text-text-muted border-white/15 hover:border-action/40 hover:text-text'
+              }`}>
+                <input type="checkbox" checked={filtreContrat.includes(t.val)}
+                  onChange={(e) => {
+                    if (e.target.checked) setFiltreContrat([...filtreContrat, t.val])
+                    else setFiltreContrat(filtreContrat.filter(v => v !== t.val))
+                  }}
+                  className="sr-only" />
+                {t.label}
+              </label>
+            ))}
+            {/* Remote : tag identique aux tags de contrat */}
+            <label className={`flex items-center px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer border transition-all ${
+              filtreRemote ? 'bg-action/15 text-action border-action/40' : 'bg-surface-glass-2 text-text-muted border-white/15 hover:border-action/40 hover:text-text'
+            }`}>
+              <input type="checkbox" checked={filtreRemote} onChange={(e) => setFiltreRemote(e.target.checked)} className="sr-only" />
+              Remote
+            </label>
           </div>
+        </div>
 
-          <label className="flex items-center gap-1.5 text-xs text-text-dim cursor-pointer pb-1">
-            <input type="checkbox" checked={filtreRemote} onChange={(e) => setFiltreRemote(e.target.checked)}
-              className="rounded border-bordure bg-surface text-action focus:ring-action/30" />
-            Remote
-          </label>
-
+        {/* Tri (sous les tags) + bouton Rechercher */}
+        <div className="flex flex-wrap items-end justify-between gap-3 pt-1">
           <div>
-            <label className="text-xs font-medium text-text-muted mb-1 block">Tri</label>
-            <select value={triDate} onChange={(e) => setTriDate(e.target.value as 'nouveau' | 'ancien')}
-              className="px-2 py-1.5 rounded-lg border border-bordure bg-surface text-text text-xs focus:border-action focus:ring-1 focus:ring-action/30">
+            <label className="text-xs font-medium text-text-muted mb-1.5 block">Tri</label>
+            <select value={triDate} onChange={(e) => setTriDate(e.target.value as 'nouveau' | 'ancien')} aria-label="Trier les offres"
+              className="px-3 py-2 rounded-lg border border-white/15 bg-surface text-text text-sm focus:border-action focus:ring-1 focus:ring-action/30">
               <option value="nouveau">+ récentes</option>
               <option value="ancien">+ anciennes</option>
             </select>
           </div>
 
-          <div className="w-full sm:w-auto sm:ml-auto pt-1 sm:pt-0">
-            <Bouton variant="primaire" onClick={lancerRecherche} disabled={ftChargement} className="w-full sm:w-auto justify-center text-xs sm:text-sm py-1.5">
-              {ftChargement ? 'Recherche...' : '🔍 Rechercher'}
-            </Bouton>
-          </div>
+          <Bouton variant="primaire" onClick={lancerRecherche} disabled={ftChargement} className="w-full sm:w-auto justify-center text-sm">
+            {ftChargement ? 'Recherche...' : '🔍 Rechercher'}
+          </Bouton>
         </div>
       </div>
 
@@ -309,15 +353,15 @@ export default function OngletOffres() {
               {TYPES_CONTRAT.find(t => t.val === c)?.label || c} <X className="w-3 h-3" />
             </button>
           ))}
-          {filtreSource && (
-            <button onClick={() => setFiltreSource('')}
+          {filtreSource.map(s => (
+            <button key={s} onClick={() => setFiltreSource(filtreSource.filter(x => x !== s))}
               className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-electric/10 border border-electric/20 text-electric hover:bg-electric/20 transition-all">
-              {filtreSource} <X className="w-3 h-3" />
+              {s} <X className="w-3 h-3" />
             </button>
-          )}
+          ))}
           {filtreRemote && (
             <button onClick={() => setFiltreRemote(false)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-vert/10 border border-vert/20 text-vert hover:bg-vert/20 transition-all">
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-action/10 border border-action/20 text-action hover:bg-action/20 transition-all">
               Remote <X className="w-3 h-3" />
             </button>
           )}
@@ -327,7 +371,7 @@ export default function OngletOffres() {
               {v} <X className="w-3 h-3" />
             </button>
           ))}
-          <button onClick={() => { setMotsCles([]); setStoreMotsCles([]); setFiltreContrat([]); setFiltreSource(''); setFiltreRemote(false); setFiltreLocalisation([]); setTriDate('nouveau') }}
+          <button onClick={() => { setMotsCles([]); setStoreMotsCles([]); setFiltreContrat([]); setFiltreSource([]); setFiltreRemote(false); setFiltreLocalisation([]); setTriDate('nouveau') }}
             className="text-action hover:underline ml-1">Tout effacer</button>
         </div>
       )}
@@ -364,13 +408,9 @@ export default function OngletOffres() {
           ) : (
             <p className="text-text-muted text-sm mb-6">Importe des offres depuis le Tableau de bord ou lance une recherche.</p>
           )}
-          <Bouton variant="primaire" onClick={() => {
-            const s = useStore.getState().settings;
-            if (s.franceTravailClientId || s.adzunaAppId) {
-              const el = document.querySelector('[data-tab="offres"] input');
-              if (el instanceof HTMLInputElement) el.focus();
-            }
-          }}>🔍 Lancer une recherche</Bouton>
+          <Bouton variant="primaire" onClick={lancerRecherche} disabled={ftChargement}>
+            {ftChargement ? 'Recherche...' : '🔍 Lancer une recherche'}
+          </Bouton>
         </div>
       ) : (
         <>
@@ -418,7 +458,7 @@ export default function OngletOffres() {
                     </div>
                     <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-text-muted">
                       {offre.dateAjout && (
-                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> il y a {joursDepuis(offre.dateAjout)} jours</span>
+                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {ancienneteLong(offre.dateAjout)}</span>
                       )}
                       {offre.source && <span className="text-text-muted/70">· {offre.source}</span>}
                       {offre.url && (
@@ -434,15 +474,35 @@ export default function OngletOffres() {
             ))}
           </div>
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <button onClick={() => setPage(Math.max(1, pageCourante - 1))} disabled={pageCourante <= 1}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium border border-bordure bg-surface-2 text-text-dim hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all">←</button>
-              {Array.from({ length: Math.min(totalPages, 50) }, (_, i) => i + 1).map((p) => (
-                <button key={p} onClick={() => setPage(p)}
-                  className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${p === pageCourante ? 'bg-action text-white' : 'border border-bordure bg-surface-2 text-text-dim hover:text-white'}`}>{p}</button>
-              ))}
-              <button onClick={() => setPage(Math.min(totalPages, pageCourante + 1))} disabled={pageCourante >= totalPages}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium border border-bordure bg-surface-2 text-text-dim hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all">→</button>
+            <div className="flex items-center justify-center gap-1.5">
+              {/* Première page — double flèche */}
+              <button type="button" onClick={() => setPage(1)} disabled={pageCourante <= 1} aria-label="Première page" title="Première page"
+                className="flex items-center justify-center w-9 h-9 rounded-lg border border-bordure bg-surface-2 text-text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                <ChevronsLeft className="w-4 h-4" /></button>
+              {/* Page précédente — flèche simple */}
+              <button type="button" onClick={() => setPage(Math.max(1, pageCourante - 1))} disabled={pageCourante <= 1} aria-label="Page précédente" title="Page précédente"
+                className="flex items-center justify-center w-9 h-9 rounded-lg border border-bordure bg-surface-2 text-text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                <ChevronLeft className="w-4 h-4" /></button>
+              {/* Fenêtre glissante de 15 numéros — page active = simple lueur venant du chiffre (pas de cadre, pas d'agrandissement) */}
+              {pagesVisibles.map((p) => {
+                const actif = p === pageCourante
+                return (
+                  <button type="button" key={p} onClick={() => setPage(p)}
+                    className={`w-9 h-9 rounded-lg border border-bordure bg-surface-2 transition-colors ${
+                      actif ? 'text-base font-bold page-active-glow' : 'text-sm text-text-dim font-medium hover:text-white'
+                    }`}>
+                    {p}
+                  </button>
+                )
+              })}
+              {/* Page suivante — flèche simple */}
+              <button type="button" onClick={() => setPage(Math.min(totalPages, pageCourante + 1))} disabled={pageCourante >= totalPages} aria-label="Page suivante" title="Page suivante"
+                className="flex items-center justify-center w-9 h-9 rounded-lg border border-bordure bg-surface-2 text-text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                <ChevronRight className="w-4 h-4" /></button>
+              {/* Dernière page — double flèche */}
+              <button type="button" onClick={() => setPage(totalPages)} disabled={pageCourante >= totalPages} aria-label="Dernière page" title="Dernière page"
+                className="flex items-center justify-center w-9 h-9 rounded-lg border border-bordure bg-surface-2 text-text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                <ChevronsRight className="w-4 h-4" /></button>
             </div>
           )}
         </>

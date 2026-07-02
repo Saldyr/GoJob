@@ -36,3 +36,6 @@ test-screenshots/
 # Test artifacts
 .playwright-cli/
 test-results/
+
+# Scripts jetables / captures de dev
+.hermes/

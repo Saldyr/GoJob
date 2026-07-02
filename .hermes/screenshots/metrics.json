@@ -1,7 +1,0 @@
-{
-  "bodyBg": "rgb(7, 7, 13) none repeat scroll 0% 0% / auto padding-box border-box",
-  "bodyColor": "rgb(232, 234, 240)",
-  "sidebarBg": "radial-gradient(80% 60% at 0% 20%, rgba(124, 58, 237, 0.08) 0%, rgba(0, 0, 0, 0) 60%) repeat scroll 15.5026% 50% / 200% 200% padding-box border-box, radial-gradient(60% 50% at 100% 80%, rgba(6, 182, 212, 0.06) 0%, rgba(0, 0, 0, 0) 50%) repeat scroll 15.5026% 50% / 200% 200% padding-box border-box, radial-gradient(50% 40%, rgba(236, 72, 153, 0.04) 0%, rgba(0, 0, 0, 0) 40%) repeat scroll 15.5026% 50% / 200% 200% padding-box border-box, rgb(7, 7, 13) none repeat scroll 15.5026% 50% / 200% 200% padding-box border-box",
-  "cardBg": "rgba(0, 0, 0, 0) linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%) repeat scroll 0% 0% / auto padding-box border-box",
-  "bodyFont": "\"Inter Variable\", -apple-system, \"Segoe UI\", Roboto, sans-serif"
-}
