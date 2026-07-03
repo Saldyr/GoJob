@@ -8,6 +8,19 @@ import { Interrupteur } from './ui/Interrupteur'
 import PageHeader from './ui/PageHeader'
 import { useT } from '../i18n/useT'
 
+// Lien externe cliquable (ouvre le navigateur système via Electron)
+function LienExterne({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={() => window.electronAPI?.openUrl?.(href)}
+      className="text-action hover:text-action-vif underline underline-offset-2 transition-colors"
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function OngletReglages() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
@@ -164,7 +177,7 @@ export default function OngletReglages() {
         >
           <div className="space-y-4">
             <p className="text-xs text-text-dim">
-              Tous métiers en France. Crée des identifiants gratuits sur francetravail.io (API « Offres d'emploi »).
+              Tous métiers en France. Crée des identifiants gratuits sur <LienExterne href="https://francetravail.io">francetravail.io</LienExterne> (API « Offres d'emploi »).
             </p>
             <Champ label="Clé API" valeur={settings.franceTravailClientId} onChange={(v) => set('franceTravailClientId', v)} placeholder="..." />
             <Champ label="Clé secret" valeur={settings.franceTravailClientSecret} onChange={(v) => set('franceTravailClientSecret', v)} placeholder="..." type="password" />
@@ -180,7 +193,7 @@ export default function OngletReglages() {
         >
           <div className="space-y-4">
             <p className="text-xs text-text-dim">
-              Généraliste international (FR · UK · ES · DE) — tous métiers. App ID + clé gratuits sur developer.adzuna.com.
+              Généraliste international (FR · UK · ES · DE) — tous métiers. App ID + clé gratuits sur <LienExterne href="https://developer.adzuna.com">developer.adzuna.com</LienExterne>.
             </p>
             <Champ label="Clé API" valeur={settings.adzunaAppId} onChange={(v) => set('adzunaAppId', v)} placeholder="ex : 1a2b3c4d" />
             <Champ label="Clé secret" valeur={settings.adzunaAppKey} onChange={(v) => set('adzunaAppKey', v)} placeholder="..." type="password" />
@@ -196,7 +209,7 @@ export default function OngletReglages() {
         >
           <div className="space-y-4">
             <p className="text-xs text-text-dim">
-              Méta-moteur multi-pays — tous métiers. Clé gratuite sur jooble.org/api.
+              Méta-moteur multi-pays — tous métiers. Clé gratuite sur <LienExterne href="https://jooble.org/api">jooble.org/api</LienExterne>.
             </p>
             <Champ label="Clé API" valeur={settings.joobleKey} onChange={(v) => set('joobleKey', v)} placeholder="..." type="password" />
           </div>
@@ -211,7 +224,7 @@ export default function OngletReglages() {
         >
           <div className="space-y-4">
             <p className="text-xs text-text-dim">
-              Offres du Royaume-Uni — tous métiers. Clé gratuite sur reed.co.uk/developers.
+              Offres du Royaume-Uni — tous métiers. Clé gratuite sur <LienExterne href="https://www.reed.co.uk/developers">reed.co.uk/developers</LienExterne>.
             </p>
             <Champ label="Clé API" valeur={settings.reedKey} onChange={(v) => set('reedKey', v)} placeholder="..." type="password" />
           </div>

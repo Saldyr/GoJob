@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore, type Offre } from '../store/useStore'
-import { Briefcase, ExternalLink, MapPin, Clock, Building2, Globe, X, Mail, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check } from 'lucide-react'
+import { Briefcase, ExternalLink, MapPin, Clock, Building2, Globe, X, Mail, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, LayoutGrid, List } from 'lucide-react'
 import { Bouton } from './ui/Bouton'
 import { ancienneteLong, canalOffre, canalActif, offreActive, PLATEFORMES, type CanalOffre } from '../utils/offres'
 import PageHeader from './ui/PageHeader'
@@ -58,6 +58,7 @@ export default function OngletOffres() {
   const [saisieVille, setSaisieVille] = useState('')
   const [triDate, setTriDate] = useState<'nouveau' | 'ancien'>('nouveau')
   const [page, setPage] = useState(1)
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [ftChargement, setFtChargement] = useState(false)
   const [message, setMessage] = useState<{ texte: string; type: 'ok' | 'info' | 'err' } | null>(null)
   const OFFRES_PAR_PAGE = 30
@@ -213,7 +214,18 @@ export default function OngletOffres() {
         icon={<Briefcase className="w-5 h-5 text-white" />}
         title={t('offers.title')}
         subtitle={t('offers.withCount', { count: offres.length })}
-        actions={<div />}
+        actions={
+          <div className="flex items-center gap-1 rounded-lg border border-bordure bg-surface-2 p-1">
+            <button type="button" onClick={() => setViewMode('list')} aria-label="Vue liste" title="Vue liste"
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${viewMode === 'list' ? 'bg-action/20 text-action' : 'text-text-dim hover:text-text'}`}>
+              <List className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={() => setViewMode('grid')} aria-label="Vue grille" title="Vue grille"
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-action/20 text-action' : 'text-text-dim hover:text-text'}`}>
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        }
       />
 
       {/* Filtre par canal : France Travail / Boîte mail / Adzuna / Jooble / Reed */}
@@ -428,7 +440,7 @@ export default function OngletOffres() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4">
+          <div className={viewMode === 'grid' ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3 items-start' : 'grid gap-4'}>
             {affichees.map((offre) => (
               <div key={offre.id} className="rounded-2xl border border-bordure bg-surface-2 p-6 shadow-sm card-hover cursor-pointer"
                 onClick={() => offre.url && window.electronAPI?.openUrl?.(offre.url)}>

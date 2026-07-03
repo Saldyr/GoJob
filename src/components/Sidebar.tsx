@@ -82,7 +82,8 @@ export default function Sidebar() {
       {/* Signature discrète en bas */}
       <div className="relative z-10 px-6 pb-6">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-border-glass to-transparent mb-5" />
-        <div className="flex items-center">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-[#9b35ff] to-[#00d9ff] shadow-[0_0_8px_rgba(155,53,255,0.6)] shrink-0" />
           <span className="text-[11px] text-text-dim tracking-[0.2em] uppercase font-medium">GoJob v1.0</span>
         </div>
       </div>

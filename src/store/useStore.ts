@@ -69,6 +69,8 @@ export interface AppState {
     remoteokEnabled: boolean
     museEnabled: boolean
     careerjetEnabled: boolean
+    // Onboarding : true une fois l'accueil du 1er lancement passé
+    onboardingVu: boolean
   }
   setProfile: (p: Profile) => void
   updateProfile: (p: Partial<Profile>) => void
@@ -131,6 +133,7 @@ const DEFAULT_SETTINGS: AppState['settings'] = {
   remoteokEnabled: true,
   museEnabled: true,
   careerjetEnabled: true,
+  onboardingVu: false,
 }
 
 function generateId(): string {
@@ -252,6 +255,7 @@ export const useStore = create<AppState>((set, get) => ({
           remoteokEnabled: (lsSettings.remoteokEnabled as boolean) ?? true,
           museEnabled: (lsSettings.museEnabled as boolean) ?? true,
           careerjetEnabled: (lsSettings.careerjetEnabled as boolean) ?? true,
+          onboardingVu: (lsSettings.onboardingVu as boolean) ?? false,
         }
         set({
           profile: (migre.profile as Profile) || { ...DEFAULT_PROFILE },

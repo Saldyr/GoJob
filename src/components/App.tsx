@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import OngletAccueil from './OngletAccueil'
 import OngletOffres from './OngletOffres'
 import OngletReglages from './OngletReglages'
+import Onboarding from './Onboarding'
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -19,6 +20,7 @@ const composants: Record<string, React.ElementType> = {
 export default function App() {
   const currentTab = useStore((s) => s.currentTab)
   const updateSettings = useStore((s) => s.updateSettings)
+  const onboardingVu = useStore((s) => s.settings.onboardingVu)
 
   // Charger les secrets + auto-connexion FT (dans l'ordre)
   useEffect(() => {
@@ -80,6 +82,10 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      <AnimatePresence>
+        {!onboardingVu && <Onboarding />}
+      </AnimatePresence>
     </div>
   )
 }
