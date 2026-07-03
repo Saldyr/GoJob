@@ -149,33 +149,55 @@ app.on('window-all-closed', () => app.quit())
 app.on('activate', () => { if (mainWindow === null) createWindow() })
 
 // ===== SAFE STORAGE =====
-// Clé API et identifiants IMAP sont chiffrés via safeStorage d'Electron.
-// L'export (voir plus bas) ne contient JAMAIS ces secrets.
+// Clé API et identifiants IMAP sont chiffrés via safeStorage d'Electron (DPAPI sous Windows).
+// Stockés dans AppData\Local (NON itinérant) pour qu'ils NE voyagent PAS vers d'autres
+// machines via un profil itinérant / OneDrive. L'export ne contient JAMAIS ces secrets.
 
-const SECRETS_FILE = path.join(app.getPath('userData'), 'gojob-secrets.enc')
+const SECRETS_DIR = process.platform === 'win32' && process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, 'gojob')
+  : app.getPath('userData')
+const SECRETS_FILE = path.join(SECRETS_DIR, 'gojob-secrets.enc')
+// Ancien emplacement itinérant (AppData\Roaming) — migré puis supprimé au démarrage.
+const SECRETS_FILE_LEGACY = path.join(app.getPath('userData'), 'gojob-secrets.enc')
+
+// Déplace les secrets de l'ancien emplacement itinérant vers le nouveau (local), puis
+// supprime l'ancien fichier pour qu'il cesse de se synchroniser entre machines.
+// Sans perte : la clé reste chiffrée (DPAPI est lié à l'utilisateur, pas au chemin).
+function migrerSecretsSiBesoin() {
+  try {
+    if (SECRETS_FILE_LEGACY === SECRETS_FILE) return
+    if (fs.existsSync(SECRETS_FILE) || !fs.existsSync(SECRETS_FILE_LEGACY)) return
+    fs.mkdirSync(SECRETS_DIR, { recursive: true })
+    fs.copyFileSync(SECRETS_FILE_LEGACY, SECRETS_FILE)
+    fs.unlinkSync(SECRETS_FILE_LEGACY)
+    console.log('[secrets] migrés vers AppData\\Local (non itinérant)')
+  } catch (err) {
+    console.log('[secrets] migration échouée:', err.message)
+  }
+}
+migrerSecretsSiBesoin()
 
 // Persistance des secrets: sauvegarde d'un objet { cleApi, franceTravailClientId, franceTravailClientSecret, imap }
 ipcMain.handle('sauvegarder-secrets', async (_event, secrets) => {
   if (!secrets || typeof secrets !== 'object') return { ok: false, erreur: 'Données invalides.' }
-  const json = JSON.stringify(secrets)
-  if (safeStorage.isEncryptionAvailable()) {
-    fs.writeFileSync(SECRETS_FILE, safeStorage.encryptString(json))
-  } else {
-    fs.writeFileSync(SECRETS_FILE, Buffer.from(json).toString('base64'))
+  // Sécurité : on REFUSE d'écrire les secrets si le chiffrement OS (DPAPI) est indisponible,
+  // plutôt que de les stocker en base64 quasi-clair sur le disque.
+  if (!safeStorage.isEncryptionAvailable()) {
+    return { ok: false, erreur: 'Chiffrement système indisponible : les clés ne peuvent pas être stockées en sécurité sur cette machine.' }
   }
-  return { ok: true }
+  try {
+    fs.mkdirSync(SECRETS_DIR, { recursive: true })
+    fs.writeFileSync(SECRETS_FILE, safeStorage.encryptString(JSON.stringify(secrets)))
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, erreur: err.message }
+  }
 })
 
 ipcMain.handle('charger-secrets', async () => {
   try {
-    if (!fs.existsSync(SECRETS_FILE)) return {}
-    const data = fs.readFileSync(SECRETS_FILE)
-    let json
-    if (safeStorage.isEncryptionAvailable()) {
-      json = safeStorage.decryptString(data)
-    } else {
-      json = Buffer.from(data.toString(), 'base64').toString('utf-8')
-    }
+    if (!fs.existsSync(SECRETS_FILE) || !safeStorage.isEncryptionAvailable()) return {}
+    const json = safeStorage.decryptString(fs.readFileSync(SECRETS_FILE))
     return JSON.parse(json)
   } catch {
     return {}
