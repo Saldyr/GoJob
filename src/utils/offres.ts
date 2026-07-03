@@ -72,7 +72,7 @@ export type OrigineOffre = 'france-travail' | 'email' | 'plateforme' | 'manuel'
 
 // Plateformes interrogées par API/connecteur (vs. reçues par alerte mail).
 // L'ordre définit l'affichage des compteurs / boutons de filtre.
-export const PLATEFORMES = ['Adzuna', 'Jooble', 'Reed'] as const
+export const PLATEFORMES = ['Adzuna', 'Jooble', 'Reed', 'Careerjet', 'The Muse', 'Arbeitnow', 'Remotive', 'RemoteOK'] as const
 export type Plateforme = (typeof PLATEFORMES)[number]
 
 const PLATEFORMES_EN_LIGNE = PLATEFORMES.map((p) => p.toLowerCase())
@@ -83,6 +83,11 @@ export function familleSource(source: string): string {
   if (/^adzuna/i.test(s)) return 'Adzuna'
   if (/^reed/i.test(s)) return 'Reed'
   if (/^jooble/i.test(s)) return 'Jooble'
+  if (/^arbeitnow/i.test(s)) return 'Arbeitnow'
+  if (/^remotive/i.test(s)) return 'Remotive'
+  if (/^remoteok/i.test(s)) return 'RemoteOK'
+  if (/^careerjet/i.test(s)) return 'Careerjet'
+  if (/^the muse/i.test(s)) return 'The Muse'
   return s
 }
 
@@ -115,6 +120,11 @@ export type ActivationPlateformes = {
   adzunaEnabled: boolean
   joobleEnabled: boolean
   reedEnabled: boolean
+  arbeitnowEnabled: boolean
+  remotiveEnabled: boolean
+  remoteokEnabled: boolean
+  museEnabled: boolean
+  careerjetEnabled: boolean
 }
 
 /** Un canal (plateforme) est-il actif d'après les Réglages ? ('manuel'/autres restent visibles). */
@@ -125,6 +135,11 @@ export function canalActif(canal: Exclude<CanalOffre, 'tout'>, s: ActivationPlat
     case 'Adzuna': return s.adzunaEnabled
     case 'Jooble': return s.joobleEnabled
     case 'Reed': return s.reedEnabled
+    case 'Arbeitnow': return s.arbeitnowEnabled
+    case 'Remotive': return s.remotiveEnabled
+    case 'RemoteOK': return s.remoteokEnabled
+    case 'Careerjet': return s.careerjetEnabled
+    case 'The Muse': return s.museEnabled
     default: return true
   }
 }

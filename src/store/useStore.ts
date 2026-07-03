@@ -56,12 +56,19 @@ export interface AppState {
     adzunaAppKey: string
     joobleKey: string
     reedKey: string
+    careerjetAffid: string
     // Activation par plateforme (une source désactivée n'est pas utilisée)
     franceTravailEnabled: boolean
     imapEnabled: boolean
     adzunaEnabled: boolean
     joobleEnabled: boolean
     reedEnabled: boolean
+    // Sources sans clé (remote/dev + généraliste) — activées par défaut
+    arbeitnowEnabled: boolean
+    remotiveEnabled: boolean
+    remoteokEnabled: boolean
+    museEnabled: boolean
+    careerjetEnabled: boolean
   }
   setProfile: (p: Profile) => void
   updateProfile: (p: Partial<Profile>) => void
@@ -113,11 +120,17 @@ const DEFAULT_SETTINGS: AppState['settings'] = {
   adzunaAppKey: '',
   joobleKey: '',
   reedKey: '',
+  careerjetAffid: '',
   franceTravailEnabled: true,
   imapEnabled: true,
   adzunaEnabled: true,
   joobleEnabled: true,
   reedEnabled: true,
+  arbeitnowEnabled: true,
+  remotiveEnabled: true,
+  remoteokEnabled: true,
+  museEnabled: true,
+  careerjetEnabled: true,
 }
 
 function generateId(): string {
@@ -222,6 +235,7 @@ export const useStore = create<AppState>((set, get) => ({
           adzunaAppKey: '',
           joobleKey: '',
           reedKey: '',
+          careerjetAffid: '',
           imapHost: (lsSettings.imapHost as string) || '',
           imapPort: (lsSettings.imapPort as number) ?? 993,
           imapTLS: (lsSettings.imapTLS as boolean) ?? true,
@@ -233,6 +247,11 @@ export const useStore = create<AppState>((set, get) => ({
           adzunaEnabled: (lsSettings.adzunaEnabled as boolean) ?? true,
           joobleEnabled: (lsSettings.joobleEnabled as boolean) ?? true,
           reedEnabled: (lsSettings.reedEnabled as boolean) ?? true,
+          arbeitnowEnabled: (lsSettings.arbeitnowEnabled as boolean) ?? true,
+          remotiveEnabled: (lsSettings.remotiveEnabled as boolean) ?? true,
+          remoteokEnabled: (lsSettings.remoteokEnabled as boolean) ?? true,
+          museEnabled: (lsSettings.museEnabled as boolean) ?? true,
+          careerjetEnabled: (lsSettings.careerjetEnabled as boolean) ?? true,
         }
         set({
           profile: (migre.profile as Profile) || { ...DEFAULT_PROFILE },
@@ -266,7 +285,7 @@ export const useStore = create<AppState>((set, get) => ({
     // cleApi, imapUser, imapPassword, franceTravailClientId/Secret
     // sont gérés exclusivement par safeStorage via sauvegarderSecrets IPC.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { cleApi, imapUser, imapPassword, franceTravailClientId, franceTravailClientSecret, adzunaAppId, adzunaAppKey, joobleKey, reedKey, ...safeSettings } = s.settings
+    const { cleApi, imapUser, imapPassword, franceTravailClientId, franceTravailClientSecret, adzunaAppId, adzunaAppKey, joobleKey, reedKey, careerjetAffid, ...safeSettings } = s.settings
     // On ne persiste PAS le champ `description` (souvent plusieurs Ko pour France Travail,
     // jamais affiché dans l'UI) : avec des milliers d'offres il ferait exploser le quota
     // localStorage (~5 Mo) → la sauvegarde échouerait et on perdrait les offres.

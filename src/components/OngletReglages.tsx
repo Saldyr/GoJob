@@ -17,20 +17,21 @@ export default function OngletReglages() {
   const [imapTest, setImapTest] = useState<{ status: 'idle' | 'testing' | 'ok' | 'err'; msg: string }>({ status: 'idle', msg: '' })
   type TestEtat = { status: 'idle' | 'testing' | 'ok' | 'err'; msg: string }
   const [ftConnect, setFtConnect] = useState<TestEtat>({ status: 'idle', msg: '' })
-  const [cleTest, setCleTest] = useState<Record<'adzuna' | 'jooble' | 'reed', TestEtat>>({
+  const [cleTest, setCleTest] = useState<Record<'adzuna' | 'jooble' | 'reed' | 'careerjet', TestEtat>>({
     adzuna: { status: 'idle', msg: '' },
     jooble: { status: 'idle', msg: '' },
     reed: { status: 'idle', msg: '' },
+    careerjet: { status: 'idle', msg: '' },
   })
 
-  const testerCle = async (plateforme: 'adzuna' | 'jooble' | 'reed') => {
+  const testerCle = async (plateforme: 'adzuna' | 'jooble' | 'reed' | 'careerjet') => {
     setCleTest((e) => ({ ...e, [plateforme]: { status: 'testing', msg: 'Test en cours…' } }))
     try {
       const s = useStore.getState().settings
       const r = await window.electronAPI?.testerCle?.({
         plateforme,
         adzunaAppId: s.adzunaAppId, adzunaAppKey: s.adzunaAppKey,
-        joobleKey: s.joobleKey, reedKey: s.reedKey,
+        joobleKey: s.joobleKey, reedKey: s.reedKey, careerjetAffid: s.careerjetAffid,
       })
       if (r?.ok) {
         setCleTest((e) => ({ ...e, [plateforme]: { status: 'ok', msg: `Clé valide — ${r.count ?? 0} offre(s) au test.` } }))
@@ -57,6 +58,7 @@ export default function OngletReglages() {
         if (secrets.adzunaAppKey) toUpdate.adzunaAppKey = secrets.adzunaAppKey
         if (secrets.joobleKey) toUpdate.joobleKey = secrets.joobleKey
         if (secrets.reedKey) toUpdate.reedKey = secrets.reedKey
+        if (secrets.careerjetAffid) toUpdate.careerjetAffid = secrets.careerjetAffid
         if (Object.keys(toUpdate).length) updateSettings(toUpdate)
       }
     })()
@@ -69,7 +71,7 @@ export default function OngletReglages() {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
     // Persister les secrets via safeStorage
-    if (['imapUser', 'imapPassword', 'franceTravailClientId', 'franceTravailClientSecret', 'adzunaAppId', 'adzunaAppKey', 'joobleKey', 'reedKey'].includes(field)) {
+    if (['imapUser', 'imapPassword', 'franceTravailClientId', 'franceTravailClientSecret', 'adzunaAppId', 'adzunaAppKey', 'joobleKey', 'reedKey', 'careerjetAffid'].includes(field)) {
       const s = useStore.getState().settings
       window.electronAPI?.sauvegarderSecrets?.({
         imapUser: s.imapUser || undefined,
@@ -80,12 +82,13 @@ export default function OngletReglages() {
         adzunaAppKey: s.adzunaAppKey || undefined,
         joobleKey: s.joobleKey || undefined,
         reedKey: s.reedKey || undefined,
+        careerjetAffid: s.careerjetAffid || undefined,
       }).catch(() => {})
     }
   }
 
   // Bouton « Tester la clé » + message de résultat, pour Adzuna / Jooble / Reed
-  const renderTestCle = (p: 'adzuna' | 'jooble' | 'reed') => {
+  const renderTestCle = (p: 'adzuna' | 'jooble' | 'reed' | 'careerjet') => {
     const etat = cleTest[p]
     return (
       <div className="space-y-2">
@@ -160,12 +163,113 @@ export default function OngletReglages() {
           }
         >
           <div className="space-y-4">
+            <p className="text-xs text-text-dim">
+              Tous métiers en France. Crée des identifiants gratuits sur francetravail.io (API « Offres d'emploi »).
+            </p>
             <Champ label="Clé API" valeur={settings.franceTravailClientId} onChange={(v) => set('franceTravailClientId', v)} placeholder="..." />
             <Champ label="Clé secret" valeur={settings.franceTravailClientSecret} onChange={(v) => set('franceTravailClientSecret', v)} placeholder="..." type="password" />
           </div>
         </Carte>
 
-        {/* Configuration IMAP */}
+        {/* Adzuna — offres en ligne (Indeed FR/UK/ES/DE + job boards) */}
+        <Carte
+          className="!h-auto"
+          titre="Adzuna"
+          actions={<Interrupteur actif={settings.adzunaEnabled} onChange={(v) => set('adzunaEnabled', v)} label="Activer Adzuna" />}
+          footer={renderTestCle('adzuna')}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-text-dim">
+              Généraliste international (FR · UK · ES · DE) — tous métiers. App ID + clé gratuits sur developer.adzuna.com.
+            </p>
+            <Champ label="Clé API" valeur={settings.adzunaAppId} onChange={(v) => set('adzunaAppId', v)} placeholder="ex : 1a2b3c4d" />
+            <Champ label="Clé secret" valeur={settings.adzunaAppKey} onChange={(v) => set('adzunaAppKey', v)} placeholder="..." type="password" />
+          </div>
+        </Carte>
+
+        {/* Jooble — agrégateur multi-pays */}
+        <Carte
+          className="!h-auto"
+          titre="Jooble"
+          actions={<Interrupteur actif={settings.joobleEnabled} onChange={(v) => set('joobleEnabled', v)} label="Activer Jooble" />}
+          footer={renderTestCle('jooble')}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-text-dim">
+              Méta-moteur multi-pays — tous métiers. Clé gratuite sur jooble.org/api.
+            </p>
+            <Champ label="Clé API" valeur={settings.joobleKey} onChange={(v) => set('joobleKey', v)} placeholder="..." type="password" />
+          </div>
+        </Carte>
+
+        {/* Reed — UK */}
+        <Carte
+          className="!h-auto"
+          titre="Reed"
+          actions={<Interrupteur actif={settings.reedEnabled} onChange={(v) => set('reedEnabled', v)} label="Activer Reed" />}
+          footer={renderTestCle('reed')}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-text-dim">
+              Offres du Royaume-Uni — tous métiers. Clé gratuite sur reed.co.uk/developers.
+            </p>
+            <Champ label="Clé API" valeur={settings.reedKey} onChange={(v) => set('reedKey', v)} placeholder="..." type="password" />
+          </div>
+        </Carte>
+
+        {/* Careerjet — multi-métier France/Europe/International (affid gratuit) */}
+        <Carte
+          className="!h-auto"
+          titre="Careerjet"
+          actions={<Interrupteur actif={settings.careerjetEnabled} onChange={(v) => set('careerjetEnabled', v)} label="Activer Careerjet" />}
+          footer={renderTestCle('careerjet')}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-text-dim">
+              Multi-métier, France + Europe + International. Colle la <span className="text-text">Clé API</span> affichée sur ta page Careerjet Publisher (pas l'identifiant dans l'URL).
+            </p>
+            <Champ label="Clé API" valeur={settings.careerjetAffid} onChange={(v) => set('careerjetAffid', v)} placeholder="ta clé API Careerjet" type="password" />
+          </div>
+        </Carte>
+
+        {/* Sources sans clé (remote / dev + généraliste) — aucune configuration, actives par défaut */}
+        <Carte className="!h-auto" titre="Sources sans clé">
+          <p className="text-sm text-text-dim mb-4">
+            Aucune clé requise : ces plateformes fonctionnent dès l'installation.
+          </p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-text font-medium">Arbeitnow</p>
+                <p className="text-xs text-text-dim">Multi-métier · Europe + remote</p>
+              </div>
+              <Interrupteur actif={settings.arbeitnowEnabled} onChange={(v) => set('arbeitnowEnabled', v)} label="Activer Arbeitnow" />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-text font-medium">Remotive</p>
+                <p className="text-xs text-text-dim">Dev / tech · 100% remote</p>
+              </div>
+              <Interrupteur actif={settings.remotiveEnabled} onChange={(v) => set('remotiveEnabled', v)} label="Activer Remotive" />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-text font-medium">RemoteOK</p>
+                <p className="text-xs text-text-dim">Dev / design · 100% remote</p>
+              </div>
+              <Interrupteur actif={settings.remoteokEnabled} onChange={(v) => set('remoteokEnabled', v)} label="Activer RemoteOK" />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-text font-medium">The Muse</p>
+                <p className="text-xs text-text-dim">Multi-métier + fiches entreprise (sans clé)</p>
+              </div>
+              <Interrupteur actif={settings.museEnabled} onChange={(v) => set('museEnabled', v)} label="Activer The Muse" />
+            </div>
+          </div>
+        </Carte>
+
+        {/* Boîte mail (IMAP) */}
         <Carte
           titre="Boîte mail (IMAP)"
           actions={<Interrupteur actif={settings.imapEnabled} onChange={(v) => set('imapEnabled', v)} label="Activer la boîte mail" />}
@@ -207,6 +311,9 @@ export default function OngletReglages() {
           }
         >
           <div className="space-y-4">
+            <p className="text-xs text-text-dim">
+              Récupère les offres reçues par <span className="text-text">alertes mail</span> (LinkedIn, Indeed, Meteojob, APEC…). Renseigne ton serveur IMAP et tes identifiants.
+            </p>
             <Champ label="Hôte" valeur={settings.imapHost} onChange={(v) => set('imapHost', v)} placeholder="imap.gmail.com" />
             <div className="grid grid-cols-2 gap-4">
               <Champ label="Port" valeur={String(settings.imapPort)} onChange={(v) => set('imapPort', parseInt(v) || 993)} placeholder="993" />
@@ -222,43 +329,6 @@ export default function OngletReglages() {
               />
               <span className="text-sm text-text">TLS</span>
             </label>
-          </div>
-        </Carte>
-
-        {/* Adzuna — offres en ligne (Indeed FR/UK/ES/DE + job boards) */}
-        <Carte
-          className="!h-auto"
-          titre="Adzuna"
-          actions={<Interrupteur actif={settings.adzunaEnabled} onChange={(v) => set('adzunaEnabled', v)} label="Activer Adzuna" />}
-          footer={renderTestCle('adzuna')}
-        >
-          <div className="space-y-4">
-            <Champ label="Clé API" valeur={settings.adzunaAppId} onChange={(v) => set('adzunaAppId', v)} placeholder="ex : 1a2b3c4d" />
-            <Champ label="Clé secret" valeur={settings.adzunaAppKey} onChange={(v) => set('adzunaAppKey', v)} placeholder="..." type="password" />
-          </div>
-        </Carte>
-
-        {/* Jooble — agrégateur multi-pays */}
-        <Carte
-          className="!h-auto"
-          titre="Jooble"
-          actions={<Interrupteur actif={settings.joobleEnabled} onChange={(v) => set('joobleEnabled', v)} label="Activer Jooble" />}
-          footer={renderTestCle('jooble')}
-        >
-          <div className="space-y-4">
-            <Champ label="Clé API" valeur={settings.joobleKey} onChange={(v) => set('joobleKey', v)} placeholder="..." type="password" />
-          </div>
-        </Carte>
-
-        {/* Reed — UK */}
-        <Carte
-          className="!h-auto"
-          titre="Reed"
-          actions={<Interrupteur actif={settings.reedEnabled} onChange={(v) => set('reedEnabled', v)} label="Activer Reed" />}
-          footer={renderTestCle('reed')}
-        >
-          <div className="space-y-4">
-            <Champ label="Clé API" valeur={settings.reedKey} onChange={(v) => set('reedKey', v)} placeholder="..." type="password" />
           </div>
         </Carte>
 

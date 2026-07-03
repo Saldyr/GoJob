@@ -338,6 +338,22 @@ function offreEnLigne(o) {
     typeContrat: o.typeContrat || '',
     remote: !!o.remote,
     tags: o.tags || [],
+    salaire: o.salaire || '',
+  }
+}
+
+// Fetch avec délai maximum (AbortController) : une source lente ou en panne
+// est abandonnée au bout de `ms` et ne bloque plus les autres connecteurs.
+async function fetchTimeout(url, options = {}, ms = 8000) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal })
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('délai dépassé (source trop lente)')
+    throw e
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -347,7 +363,7 @@ async function fetchAdzuna(appId, appKey, requete, localisation, pays) {
   appId = (appId || '').trim(); appKey = (appKey || '').trim()
   const params = new URLSearchParams({ app_id: appId, app_key: appKey, results_per_page: '50', what: requete, 'content-type': 'application/json' })
   if (localisation) params.set('where', localisation)
-  const res = await fetch(`https://api.adzuna.com/v1/api/jobs/${pays}/search/1?${params}`)
+  const res = await fetchTimeout(`https://api.adzuna.com/v1/api/jobs/${pays}/search/1?${params}`)
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) throw new Error('Clés Adzuna invalides.')
     throw new Error(`Adzuna ${ADZUNA_PAYS[pays] || pays} : erreur ${res.status}`)
@@ -365,7 +381,7 @@ async function fetchAdzuna(appId, appKey, requete, localisation, pays) {
 // --- Jooble (agrégateur multi-pays) ---
 async function fetchJooble(key, requete, localisation) {
   key = (key || '').trim()
-  const res = await fetch(`https://jooble.org/api/${key}`, {
+  const res = await fetchTimeout(`https://jooble.org/api/${key}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ keywords: requete, location: localisation || '' }),
   })
@@ -387,7 +403,7 @@ async function fetchReed(key, requete, localisation) {
   const params = new URLSearchParams({ keywords: requete, resultsToTake: '50' })
   if (localisation) params.set('locationName', localisation)
   const auth = Buffer.from(`${key}:`).toString('base64')
-  const res = await fetch(`https://www.reed.co.uk/api/1.0/search?${params}`, { headers: { Authorization: `Basic ${auth}` } })
+  const res = await fetchTimeout(`https://www.reed.co.uk/api/1.0/search?${params}`, { headers: { Authorization: `Basic ${auth}` } })
   if (!res.ok) {
     if (res.status === 401) throw new Error('Clé Reed invalide.')
     throw new Error(`Reed : erreur ${res.status}`)
@@ -399,33 +415,184 @@ async function fetchReed(key, requete, localisation) {
   }))
 }
 
+// Normalise un type de contrat texte libre vers les valeurs connues de l'app.
+function mapContrat(s) {
+  s = (s || '').toLowerCase()
+  if (/perman|full[\s_-]?time|cdi/.test(s)) return 'cdi'
+  if (/contract|temp|fixed|cdd/.test(s)) return 'cdd'
+  if (/free[\s_-]?lance|independ/.test(s)) return 'freelance'
+  if (/intern(?!ational)|stage/.test(s)) return 'stage'
+  if (/interim|int[ée]rim/.test(s)) return 'interim'
+  return ''
+}
+
+// Filtre client des offres par mots-clés (pour les sources sans recherche serveur).
+// Vide → aucun filtre (on renvoie les dernières offres du flux).
+function filtreParMots(offres, motsCles) {
+  const q = (motsCles || '').trim().toLowerCase()
+  if (!q) return offres
+  const termes = q.split(/\s+/).filter(Boolean)
+  return offres.filter((o) => {
+    const hay = `${o.titre} ${o.description} ${(o.tags || []).join(' ')}`.toLowerCase()
+    return termes.some((t) => hay.includes(t))
+  })
+}
+
+// --- Arbeitnow (Europe + remote, sans clé) — flux global, filtré côté client ---
+async function fetchArbeitnow(motsCles) {
+  const res = await fetchTimeout('https://www.arbeitnow.com/api/job-board-api', { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`Arbeitnow : erreur ${res.status}`)
+  const data = await res.json()
+  const offres = (data.data || []).map((o) => offreEnLigne({
+    id: `arbeitnow-${o.slug}`, titre: o.title, entreprise: o.company_name || '',
+    description: (o.description || '').replace(/<[^>]+>/g, ' '), url: o.url || '', source: 'Arbeitnow',
+    ville: o.location || '', remote: !!o.remote,
+    typeContrat: Array.isArray(o.job_types) && o.job_types.length ? mapContrat(o.job_types[0]) : '',
+    tags: Array.isArray(o.tags) ? o.tags : [],
+  }))
+  return filtreParMots(offres, motsCles)
+}
+
+// --- Remotive (remote/tech, sans clé) — recherche serveur via `search` ---
+async function fetchRemotive(motsCles) {
+  const params = new URLSearchParams({ limit: '50' })
+  const q = (motsCles || '').trim()
+  if (q) params.set('search', q)
+  const res = await fetchTimeout(`https://remotive.com/api/remote-jobs?${params}`, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`Remotive : erreur ${res.status}`)
+  const data = await res.json()
+  return (data.jobs || []).slice(0, 50).map((j) => offreEnLigne({
+    id: `remotive-${j.id}`, titre: j.title, entreprise: j.company_name || '',
+    description: (j.description || '').replace(/<[^>]+>/g, ' '), url: j.url || '', source: 'Remotive',
+    ville: j.candidate_required_location || 'Remote', remote: true,
+    typeContrat: mapContrat(j.job_type), tags: Array.isArray(j.tags) ? j.tags : [],
+  }))
+}
+
+// --- RemoteOK (remote/dev, sans clé) — flux global, User-Agent requis, filtré côté client ---
+async function fetchRemoteOK(motsCles) {
+  const res = await fetchTimeout('https://remoteok.com/api', { headers: { Accept: 'application/json', 'User-Agent': 'GoJob/1.0 (job aggregator)' } })
+  if (!res.ok) throw new Error(`RemoteOK : erreur ${res.status}`)
+  const data = await res.json()
+  // Le 1er élément est un objet légal (pas une offre) → filtré par la présence de `position`.
+  const jobs = Array.isArray(data) ? data.filter((o) => o && o.id && o.position) : []
+  const offres = jobs.slice(0, 80).map((o) => offreEnLigne({
+    id: `remoteok-${o.id}`, titre: o.position, entreprise: o.company || '',
+    description: (o.description || '').replace(/<[^>]+>/g, ' '), url: o.url || o.apply_url || '', source: 'RemoteOK',
+    ville: o.location || 'Remote', remote: true, tags: Array.isArray(o.tags) ? o.tags : [],
+  }))
+  return filtreParMots(offres, motsCles)
+}
+
+// --- Careerjet (multi-métier, France/Europe/International) ---
+// v4 : la clé API passe en HTTP Basic Auth (clé = username, mot de passe vide), pas en paramètre d'URL.
+async function fetchCareerjet(apiKey, requete, localisation) {
+  apiKey = (apiKey || '').trim()
+  const params = new URLSearchParams({
+    keywords: requete,
+    location: localisation || '',
+    user_ip: '81.2.69.142',
+    user_agent: 'GoJob/1.0',
+    pagesize: '50',
+    sort: 'date',
+    locale_code: 'fr_FR',
+  })
+  const auth = Buffer.from(`${apiKey}:`).toString('base64')
+  // v4 exige un en-tête Referer (sinon « Undeclared referrer ») + une IP source autorisée dans le compte publisher.
+  const res = await fetchTimeout(`https://search.api.careerjet.net/v4/query?${params}`, {
+    headers: { Accept: 'application/json', Authorization: `Basic ${auth}`, Referer: 'https://gojob.app' },
+  })
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) throw new Error('Clé API Careerjet invalide.')
+    throw new Error(`Careerjet : erreur ${res.status}`)
+  }
+  const data = await res.json()
+  if (data.type === 'ERROR') throw new Error(data.error || data.message || 'Careerjet : requête refusée.')
+  return (data.jobs || []).slice(0, 50).map((j) => offreEnLigne({
+    id: `careerjet-${j.url || j.title}`, titre: j.title, entreprise: j.company || '',
+    description: (j.description || '').replace(/<[^>]+>/g, ' '), url: j.url || '', source: 'Careerjet',
+    ville: j.locations || '', salaire: j.salary || '',
+    remote: /remote|t[ée]l[ée]travail/i.test((j.title || '') + (j.description || '')),
+  }))
+}
+
+// --- The Muse (multi-métier + fiches entreprise) — clé optionnelle, fonctionne sans ---
+async function fetchMuse(motsCles) {
+  // The Muse renvoie 20 offres/page et n'a pas de recherche serveur → on récupère
+  // plusieurs pages puis on filtre par mots-clés côté client.
+  const brutes = []
+  for (let page = 0; page < 5; page++) {
+    const res = await fetchTimeout(`https://www.themuse.com/api/public/jobs?page=${page}`, { headers: { Accept: 'application/json' } })
+    if (!res.ok) { if (page === 0) throw new Error(`The Muse : erreur ${res.status}`); break }
+    const data = await res.json()
+    const lot = data.results || []
+    if (!lot.length) break
+    brutes.push(...lot)
+  }
+  const offres = brutes.map((r) => offreEnLigne({
+    id: `muse-${r.id}`, titre: r.name, entreprise: (r.company && r.company.name) || '',
+    description: (r.contents || '').replace(/<[^>]+>/g, ' '), url: (r.refs && r.refs.landing_page) || '', source: 'The Muse',
+    ville: Array.isArray(r.locations) ? r.locations.map((l) => l.name).join(', ') : '',
+    typeContrat: mapContrat(r.type),
+    remote: Array.isArray(r.locations) && r.locations.some((l) => /remote|flexible/i.test(l.name || '')),
+  }))
+  return filtreParMots(offres, motsCles)
+}
+
 ipcMain.handle('chercher-en-ligne', async (_event, cfg) => {
-  const { motsCles, localisation, adzunaAppId, adzunaAppKey, joobleKey, reedKey } = cfg || {}
+  const { motsCles, localisation, adzunaAppId, adzunaAppKey, joobleKey, reedKey, arbeitnow, remotive, remoteok, careerjetAffid, muse } = cfg || {}
   const requete = (motsCles || '').trim() || 'architecte'
+  const motsClesRaw = (motsCles || '').trim() // sans le repli 'architecte' (pour les flux sans clé)
   const offres = []
   const erreurs = []
+  const parSource = {} // { 'Adzuna FR': 12, Jooble: 40, … } — statut par source
 
-  const lancer = async (fn) => {
-    try { offres.push(...await fn()) } catch (e) { erreurs.push(e.message || 'Erreur connecteur') }
+  const lancer = async (label, fn) => {
+    try {
+      const res = await fn()
+      parSource[label] = (parSource[label] || 0) + res.length
+      offres.push(...res)
+    } catch (e) {
+      erreurs.push(`${label} : ${e.message || 'erreur'}`)
+    }
   }
 
   const taches = []
   if (adzunaAppId && adzunaAppKey) {
     for (const p of ['fr', 'gb', 'es', 'de']) {
-      taches.push(lancer(() => fetchAdzuna(adzunaAppId, adzunaAppKey, requete, p === 'fr' ? localisation : '', p)))
+      taches.push(lancer(`Adzuna ${ADZUNA_PAYS[p]}`, () => fetchAdzuna(adzunaAppId, adzunaAppKey, requete, p === 'fr' ? localisation : '', p)))
     }
   }
-  if (joobleKey) taches.push(lancer(() => fetchJooble(joobleKey, requete, localisation)))
-  if (reedKey) taches.push(lancer(() => fetchReed(reedKey, requete, localisation)))
+  if (joobleKey) taches.push(lancer('Jooble', () => fetchJooble(joobleKey, requete, localisation)))
+  if (reedKey) taches.push(lancer('Reed', () => fetchReed(reedKey, requete, localisation)))
+  // Sources sans clé (activées par un simple booléen)
+  if (arbeitnow) taches.push(lancer('Arbeitnow', () => fetchArbeitnow(motsClesRaw)))
+  if (remotive) taches.push(lancer('Remotive', () => fetchRemotive(motsClesRaw)))
+  if (remoteok) taches.push(lancer('RemoteOK', () => fetchRemoteOK(motsClesRaw)))
+  if (muse) taches.push(lancer('The Muse', () => fetchMuse(motsClesRaw)))
+  // Careerjet : affid (clé gratuite) requis
+  if (careerjetAffid) taches.push(lancer('Careerjet', () => fetchCareerjet(careerjetAffid, requete, localisation)))
 
   await Promise.all(taches)
-  return { ok: true, offres, erreurs, total: offres.length }
+
+  // Dédoublonnage inter-sources : une même offre remontée par 2 plateformes
+  // (même URL, aux paramètres de tracking près) n'est gardée qu'une fois.
+  const vus = new Set()
+  const uniques = []
+  for (const o of offres) {
+    const cle = (o.url || o.id || '').toLowerCase().replace(/[?#].*$/, '').replace(/\/+$/, '')
+    if (cle && vus.has(cle)) continue
+    if (cle) vus.add(cle)
+    uniques.push(o)
+  }
+
+  return { ok: true, offres: uniques, erreurs, total: uniques.length, parSource }
 })
 
 // Teste la clé d'une plateforme : lance une requête réelle ('architect') et renvoie le nombre d'offres.
 // Une clé invalide fait remonter l'erreur du connecteur (401/403 → « Clé … invalide »).
 ipcMain.handle('tester-cle', async (_event, cfg) => {
-  const { plateforme, adzunaAppId, adzunaAppKey, joobleKey, reedKey } = cfg || {}
+  const { plateforme, adzunaAppId, adzunaAppKey, joobleKey, reedKey, careerjetAffid } = cfg || {}
   try {
     let offres = []
     if (plateforme === 'adzuna') {
@@ -437,6 +604,9 @@ ipcMain.handle('tester-cle', async (_event, cfg) => {
     } else if (plateforme === 'reed') {
       if (!reedKey) return { ok: false, erreur: 'Renseigne la clé Reed.' }
       offres = await fetchReed(reedKey, 'architect', '')
+    } else if (plateforme === 'careerjet') {
+      if (!careerjetAffid) return { ok: false, erreur: 'Renseigne l\'affid Careerjet.' }
+      offres = await fetchCareerjet(careerjetAffid, 'developer', '')
     } else {
       return { ok: false, erreur: 'Plateforme inconnue.' }
     }

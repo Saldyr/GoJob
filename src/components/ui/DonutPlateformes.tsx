@@ -31,7 +31,9 @@ export function DonutPlateformes({
   const R = 64
   const STROKE = 12
 
-  let acc = 0
+  // Décalage cumulé (en %) de chaque segment = somme des parts précédentes.
+  // Précalculé sans mutation pour rester conforme aux règles React (pas de `let` muté pendant le rendu).
+  const offsets = ordered.map((_, i) => ordered.slice(0, i).reduce((a, seg) => a + (seg.value / sum) * 100, 0))
 
   return (
     <div className="flex flex-col sm:flex-row items-center gap-10">
@@ -48,8 +50,7 @@ export function DonutPlateformes({
           <circle cx="80" cy="80" r={R} fill="none" stroke="rgba(255,255,255,0.045)" strokeWidth={STROKE} />
           {ordered.map((s, i) => {
             const pct = (s.value / sum) * 100
-            const offset = -acc
-            acc += pct
+            const offset = -offsets[i]
             if (s.value <= 0) return null
             // longueur = part - écart, au moins MIN (visible) et jamais plus que sa part (pas de chevauchement)
             const seg = Math.min(Math.max(pct - GAP, MIN), pct)

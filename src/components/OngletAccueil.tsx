@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
+import type { Offre } from '../store/useStore'
 import {
   Loader2,
   CheckCircle2,
@@ -125,7 +126,7 @@ export default function OngletAccueil() {
   }
 
   // ── Import d'une seule plateforme en ligne (Adzuna / Jooble / Reed) ──
-  const importerEnLigneCible = async (cible: 'Adzuna' | 'Jooble' | 'Reed') => {
+  const importerEnLigneCible = async (cible: 'Adzuna' | 'Jooble' | 'Reed' | 'Arbeitnow' | 'Remotive' | 'RemoteOK' | 'Careerjet' | 'The Muse') => {
     if (!window.electronAPI?.chercherEnLigne) {
       setImportStatus('erreur')
       setImportMessage('API Electron non disponible.')
@@ -137,10 +138,16 @@ export default function OngletAccueil() {
       const cfg: {
         motsCles: string; localisation: string
         adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string
+        arbeitnow?: boolean; remotive?: boolean; remoteok?: boolean; careerjetAffid?: string; muse?: boolean
       } = { motsCles: searchMotsCles.join(' ').trim(), localisation: '' }
       if (cible === 'Adzuna') { cfg.adzunaAppId = settings.adzunaAppId; cfg.adzunaAppKey = settings.adzunaAppKey }
       if (cible === 'Jooble') cfg.joobleKey = settings.joobleKey
       if (cible === 'Reed') cfg.reedKey = settings.reedKey
+      if (cible === 'Arbeitnow') cfg.arbeitnow = true
+      if (cible === 'Remotive') cfg.remotive = true
+      if (cible === 'RemoteOK') cfg.remoteok = true
+      if (cible === 'Careerjet') cfg.careerjetAffid = settings.careerjetAffid
+      if (cible === 'The Muse') cfg.muse = true
 
       const r = await window.electronAPI.chercherEnLigne(cfg)
       if (r.ok) {
@@ -171,16 +178,96 @@ export default function OngletAccueil() {
     try { await fn() } finally { setLoadingCible(null) }
   }
 
-  // Rafraîchit toutes les plateformes d'un coup.
+  // Rafraîchit toutes les sources activées EN PARALLÈLE (et non en série) :
+  // le temps total = la source la plus lente, pas la somme. Les plateformes en
+  // ligne (Adzuna/Jooble/Reed) partent en un seul appel groupé, lui-même
+  // parallélisé côté Electron. Un message unique agrège le résultat.
   const toutRafraichir = async () => {
     if (loadingCible) return
     setLoadingCible('all')
+    setImportStatus('loading')
+    setImportMessage('Rafraîchissement de toutes les sources…')
+    const erreurMsg = (e: unknown) => (e instanceof Error ? e.message : 'Erreur inconnue')
+
+    type Res = { offres: Offre[]; erreur?: string }
+    const tasks: Promise<Res>[] = []
+
+    // Boîte mail (IMAP)
+    if (settings.imapEnabled && window.electronAPI?.imapFetchRecent) {
+      tasks.push((async (): Promise<Res> => {
+        try {
+          const r = await window.electronAPI!.imapFetchRecent({
+            host: settings.imapHost, port: settings.imapPort || 993,
+            user: settings.imapUser, password: settings.imapPassword,
+            tlsEnabled: settings.imapTLS !== false, maxEmails: 150,
+          })
+          return { offres: r.ok ? (r.offres || []) : [], erreur: r.ok ? undefined : r.erreur }
+        } catch (e) { return { offres: [], erreur: erreurMsg(e) } }
+      })())
+    }
+
+    // France Travail (connexion puis recherche)
+    if (settings.franceTravailEnabled && settings.franceTravailClientId && settings.franceTravailClientSecret && window.electronAPI?.franceTravailConnect) {
+      tasks.push((async (): Promise<Res> => {
+        try {
+          const c = await window.electronAPI!.franceTravailConnect({
+            clientId: settings.franceTravailClientId, clientSecret: settings.franceTravailClientSecret,
+          })
+          if (!c.ok) return { offres: [], erreur: c.erreur || 'France Travail : connexion échouée' }
+          const r = await window.electronAPI!.franceTravailOffres({ motsCles: searchMotsCles.join(' ').trim(), localisation: '' })
+          return { offres: r.ok ? (r.offres || []) : [], erreur: r.ok ? undefined : r.erreur }
+        } catch (e) { return { offres: [], erreur: erreurMsg(e) } }
+      })())
+    }
+
+    // Plateformes en ligne (Adzuna + Jooble + Reed) en UN seul appel parallélisé
+    const onlineActif =
+      (settings.adzunaEnabled && settings.adzunaAppId && settings.adzunaAppKey) ||
+      (settings.joobleEnabled && settings.joobleKey) ||
+      (settings.reedEnabled && settings.reedKey) ||
+      (settings.careerjetEnabled && settings.careerjetAffid) ||
+      settings.arbeitnowEnabled || settings.remotiveEnabled || settings.remoteokEnabled || settings.museEnabled
+    if (onlineActif && window.electronAPI?.chercherEnLigne) {
+      tasks.push((async (): Promise<Res> => {
+        try {
+          const cfg: { motsCles: string; localisation: string; adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string; arbeitnow?: boolean; remotive?: boolean; remoteok?: boolean; careerjetAffid?: string; muse?: boolean } =
+            { motsCles: searchMotsCles.join(' ').trim(), localisation: '' }
+          if (settings.adzunaEnabled) { cfg.adzunaAppId = settings.adzunaAppId; cfg.adzunaAppKey = settings.adzunaAppKey }
+          if (settings.joobleEnabled) cfg.joobleKey = settings.joobleKey
+          if (settings.reedEnabled) cfg.reedKey = settings.reedKey
+          if (settings.arbeitnowEnabled) cfg.arbeitnow = true
+          if (settings.remotiveEnabled) cfg.remotive = true
+          if (settings.remoteokEnabled) cfg.remoteok = true
+          if (settings.careerjetEnabled) cfg.careerjetAffid = settings.careerjetAffid
+          if (settings.museEnabled) cfg.muse = true
+          const r = await window.electronAPI!.chercherEnLigne(cfg)
+          return { offres: r.ok ? (r.offres || []) : [], erreur: (r.erreurs && r.erreurs.length) ? r.erreurs.join(' · ') : undefined }
+        } catch (e) { return { offres: [], erreur: erreurMsg(e) } }
+      })())
+    }
+
     try {
-      if (settings.imapEnabled) await importerDepuisIMAP()
-      if (settings.franceTravailEnabled) await importerDepuisFT()
-      if (settings.adzunaEnabled) await importerEnLigneCible('Adzuna')
-      if (settings.joobleEnabled) await importerEnLigneCible('Jooble')
-      if (settings.reedEnabled) await importerEnLigneCible('Reed')
+      const results = await Promise.allSettled(tasks)
+      const urls = new Set(useStore.getState().offres.map((o) => o.url).filter(Boolean))
+      let ajout = 0
+      const erreurs: string[] = []
+      for (const res of results) {
+        if (res.status !== 'fulfilled') continue
+        if (res.value.erreur) erreurs.push(res.value.erreur)
+        for (const o of res.value.offres) {
+          if (o.url && !urls.has(o.url)) { urls.add(o.url); addOffre(o); ajout++ }
+        }
+      }
+      if (ajout > 0) {
+        setImportStatus('ok')
+        setImportMessage(`${ajout} nouvelle${ajout > 1 ? 's' : ''} offre${ajout > 1 ? 's' : ''} importée${ajout > 1 ? 's' : ''}.`)
+      } else if (erreurs.length) {
+        setImportStatus('erreur')
+        setImportMessage(erreurs[0])
+      } else {
+        setImportStatus('ok')
+        setImportMessage('Aucune nouvelle offre.')
+      }
     } finally { setLoadingCible(null) }
   }
 
@@ -234,6 +321,11 @@ export default function OngletAccueil() {
     Adzuna: '#a855f7',           // violet
     Jooble: '#3b82f6',           // bleu
     Reed: '#e879f9',             // fuchsia
+    Arbeitnow: '#34d399',        // émeraude
+    Remotive: '#fbbf24',         // ambre
+    RemoteOK: '#f97316',         // orange
+    Careerjet: '#14b8a6',        // teal
+    'The Muse': '#ec4899',       // rose vif
   }
   const segmentsPlateforme = [
     { key: 'france-travail', label: 'France Travail', value: nbFT },
@@ -250,6 +342,11 @@ export default function OngletAccueil() {
     { key: 'Adzuna', label: 'Adzuna', color: COULEURS_PLATEFORME.Adzuna, run: () => importerEnLigneCible('Adzuna') },
     { key: 'Jooble', label: 'Jooble', color: COULEURS_PLATEFORME.Jooble, run: () => importerEnLigneCible('Jooble') },
     { key: 'Reed', label: 'Reed', color: COULEURS_PLATEFORME.Reed, run: () => importerEnLigneCible('Reed') },
+    { key: 'Arbeitnow', label: 'Arbeitnow', color: COULEURS_PLATEFORME.Arbeitnow, run: () => importerEnLigneCible('Arbeitnow') },
+    { key: 'Remotive', label: 'Remotive', color: COULEURS_PLATEFORME.Remotive, run: () => importerEnLigneCible('Remotive') },
+    { key: 'RemoteOK', label: 'RemoteOK', color: COULEURS_PLATEFORME.RemoteOK, run: () => importerEnLigneCible('RemoteOK') },
+    { key: 'Careerjet', label: 'Careerjet', color: COULEURS_PLATEFORME.Careerjet, run: () => importerEnLigneCible('Careerjet') },
+    { key: 'The Muse', label: 'The Muse', color: COULEURS_PLATEFORME['The Muse'], run: () => importerEnLigneCible('The Muse') },
   ]
 
   // Pastille de couleur (comme la légende du donut) pour les en-têtes de carte plateforme

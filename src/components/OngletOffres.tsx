@@ -109,16 +109,22 @@ export default function OngletOffres() {
       }
     }
 
-    // Plateformes en ligne — uniquement celles activées (Adzuna, Jooble, Reed)
-    if (window.electronAPI?.chercherEnLigne && (s.adzunaEnabled || s.joobleEnabled || s.reedEnabled)) {
+    // Plateformes en ligne — uniquement celles activées (Adzuna, Jooble, Reed, + sources sans clé)
+    if (window.electronAPI?.chercherEnLigne && (s.adzunaEnabled || s.joobleEnabled || s.reedEnabled || s.arbeitnowEnabled || s.remotiveEnabled || s.remoteokEnabled || s.museEnabled || (s.careerjetEnabled && s.careerjetAffid))) {
       try {
         const cfg: {
           motsCles: string; localisation: string
           adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string
+          arbeitnow?: boolean; remotive?: boolean; remoteok?: boolean; careerjetAffid?: string; muse?: boolean
         } = { motsCles: requete, localisation: loc }
         if (s.adzunaEnabled) { cfg.adzunaAppId = s.adzunaAppId; cfg.adzunaAppKey = s.adzunaAppKey }
         if (s.joobleEnabled) cfg.joobleKey = s.joobleKey
         if (s.reedEnabled) cfg.reedKey = s.reedKey
+        if (s.arbeitnowEnabled) cfg.arbeitnow = true
+        if (s.remotiveEnabled) cfg.remotive = true
+        if (s.remoteokEnabled) cfg.remoteok = true
+        if (s.careerjetEnabled) cfg.careerjetAffid = s.careerjetAffid
+        if (s.museEnabled) cfg.muse = true
         const r = await window.electronAPI.chercherEnLigne(cfg)
         if (r.ok) ajouter(r.offres || [])
         if (r.erreurs?.length) erreurs.push(...r.erreurs)
@@ -127,16 +133,24 @@ export default function OngletOffres() {
       }
     }
 
+    // Terme réellement saisi par l'utilisateur (les tags existants, ou le champ texte).
+    // Le repli 'architecte' sert uniquement à interroger les API, jamais à créer un tag.
+    const termeSaisi = motsCles.join(' ').trim() || recherche.trim()
     if (ajoutees > 0) {
-      if (motsCles.length === 0 && requete) { setMotsCles([requete]); setStoreMotsCles([requete]) }
-      setMessage({ texte: `${ajoutees} nouvelle${ajoutees > 1 ? 's' : ''} offre${ajoutees > 1 ? 's' : ''} pour « ${requete} »`, type: 'ok' })
+      if (motsCles.length === 0 && recherche.trim()) { setMotsCles([recherche.trim()]); setStoreMotsCles([recherche.trim()]) }
+      setMessage({
+        texte: termeSaisi
+          ? `${ajoutees} nouvelle${ajoutees > 1 ? 's' : ''} offre${ajoutees > 1 ? 's' : ''} pour « ${termeSaisi} »`
+          : `${ajoutees} nouvelle${ajoutees > 1 ? 's' : ''} offre${ajoutees > 1 ? 's' : ''} importée${ajoutees > 1 ? 's' : ''}`,
+        type: 'ok',
+      })
       setTimeout(() => setMessage(null), 4000)
     } else if (!s.franceTravailClientId && !s.adzunaAppId && !s.joobleKey && !s.reedKey) {
       setMessage({ texte: 'Configure tes sources dans Réglages (France Travail, Adzuna, Jooble, Reed) pour de meilleurs résultats.', type: 'info' })
     } else if (erreurs.length) {
       setMessage({ texte: erreurs[0], type: 'err' })
     } else {
-      setMessage({ texte: `Aucune nouvelle offre trouvée pour « ${requete} ».`, type: 'info' })
+      setMessage({ texte: termeSaisi ? `Aucune nouvelle offre trouvée pour « ${termeSaisi} ».` : 'Aucune nouvelle offre trouvée.', type: 'info' })
     }
     setFtChargement(false)
   }

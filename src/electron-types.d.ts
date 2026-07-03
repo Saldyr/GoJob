@@ -12,6 +12,7 @@ interface ElectronAPI {
     adzunaAppKey?: string
     joobleKey?: string
     reedKey?: string
+    careerjetAffid?: string
   }>
 
   sauvegarderSecrets: (secrets: {
@@ -24,6 +25,7 @@ interface ElectronAPI {
     adzunaAppKey?: string
     joobleKey?: string
     reedKey?: string
+    careerjetAffid?: string
   }) => Promise<{ ok: boolean; erreur?: string }>
 
   imapConnect: (params: { host: string; port: number; user: string; password: string; tlsEnabled: boolean }) => Promise<{ ok: boolean; message?: string; erreur?: string }>
@@ -37,9 +39,9 @@ interface ElectronAPI {
 
   franceTravailOffres: (params: { motsCles?: string; localisation?: string }) => Promise<{ ok: boolean; offres?: import('./store/useStore').Offre[]; erreur?: string }>
 
-  chercherEnLigne: (params: { motsCles?: string; localisation?: string; adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string }) => Promise<{ ok: boolean; offres?: import('./store/useStore').Offre[]; erreurs?: string[]; total?: number }>
+  chercherEnLigne: (params: { motsCles?: string; localisation?: string; adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string; arbeitnow?: boolean; remotive?: boolean; remoteok?: boolean; careerjetAffid?: string; muse?: boolean }) => Promise<{ ok: boolean; offres?: import('./store/useStore').Offre[]; erreurs?: string[]; total?: number; parSource?: Record<string, number> }>
 
-  testerCle: (params: { plateforme: 'adzuna' | 'jooble' | 'reed'; adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string }) => Promise<{ ok: boolean; count?: number; erreur?: string }>
+  testerCle: (params: { plateforme: 'adzuna' | 'jooble' | 'reed' | 'careerjet'; adzunaAppId?: string; adzunaAppKey?: string; joobleKey?: string; reedKey?: string; careerjetAffid?: string }) => Promise<{ ok: boolean; count?: number; erreur?: string }>
 
   openUrl: (url: string) => Promise<void>
 }
